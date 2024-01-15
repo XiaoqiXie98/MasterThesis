@@ -1,0 +1,190 @@
+setwd("/Users/xiaoqixie/Desktop/Thesis")
+library("dplyr")
+#load data estimating the influence of non-jack and jack
+load("Code/Chapter 3/Estimating s/influencewithin4km_notjack_nottargetcell_s.RData")
+load("Code/Chapter 3/Estimating s/influencewithin4km_jack_nottargetcell_s.RData")
+i_not_jack=as.numeric(finalResult[,2:15])#2006-2019
+i_jack=as.numeric(finalResult1[,2:15])#2006-2019
+#load data
+load("Code/Chapter 3/data_beoudoin_age.RData")
+data1=cbind(data1,i_not_jack,i_jack)
+d=data1[-which(data1$mz==0&data1$Infest==0),]
+not_jack=d$i_not_jack
+jack=d$i_jack
+infestl=d$infestl
+y=d$Infest
+x=d[,-c(1:4,12,19,20,21,22,23,24)]
+#function
+fun1=function(x){
+  return((x-min(x))/(max(x)-min(x)))
+}
+x_trans=apply(x,2,fun1)
+
+library(LaplacesDemon)
+
+#This part of codes were written based on the codes in Package "pscl".
+neg_logl=function(parms,x,y,jack,not_jack,infestl,Q){#x not include dispersal,last year infections and include Q
+  nx=(length(parms)-2)/2#number of covariates in sub-model
+  cx=as.numeric(parms[1:nx])
+  cz=as.numeric(parms[(nx+1):(2*nx)])
+  s=exp(parms[(2*nx+1)])
+  #s=invlogit(parms[(2*nx+1)])
+  phi=exp(parms[(2*nx+2)])#from 0 to infinity
+  
+  dispersal=not_jack+s*jack
+  infestl1=ifelse(Q<=0.1,s*infestl,infestl)
+  x=as.matrix(cbind(x,infestl1,dispersal))
+  X=as.matrix(cbind(1,x))
+  
+  mu <- as.vector(exp(X %*% cx))
+  etaz <- as.vector(X %*% cz)
+  pi<-invlogit(etaz)
+  
+  loglik0 <- log( pi + exp( log(1-pi) + suppressWarnings(dnbinom(0, size = phi, mu = mu, log = TRUE)) ) )
+  loglik1 <- log(1-pi) + suppressWarnings(dnbinom(y, size = phi, mu = mu, log = TRUE))
+  
+  Y0=which(y==0)
+  Y1=which(y>0)
+  logl=sum(loglik0[Y0])+sum(loglik1[Y1])
+  return(-logl)
+}
+
+grad=function(parms,x,y,jack,not_jack,infestl,Q){
+  nx=(length(parms)-2)/2#number of covariates in sub-model
+  cx=as.numeric(parms[1:nx])#count
+  cz=as.numeric(parms[(nx+1):(2*nx)])#zero
+  s=exp(parms[(2*nx+1)])
+  #s=invlogit(parms[(2*nx+1)])
+  phi=exp(parms[(2*nx+2)])
+  
+  dispersal=not_jack+s*jack
+  infestl1=ifelse(Q<=0.1,s*infestl,infestl)
+  x=as.matrix(cbind(x,infestl1,dispersal))
+  X=as.matrix(cbind(1,x))
+  
+  mu <- as.vector(exp(X %*% cx))
+  etaz <- as.vector(X %*% cz)
+  pi<-invlogit(etaz)
+  
+  
+  nb0 <- dnbinom(0, size = phi, mu = mu, log = F)
+  dens0 <- (1-pi)*nb0+ pi#prob 0 of the complete model
+  
+  
+  grad_beta=ifelse(y==0,
+                   exp(-log(dens0)+log(1 - pi) + log(nb0) + log(phi) - log(mu + phi) + log(mu)),-(y - mu * (y + phi)/(mu + phi)))
+  
+  grad_gamma=ifelse(y==0,
+                    -((1 / dens0 )* pi*(1-pi) * (1 - nb0)),
+                    pi)
+  
+  v1=ifelse(Q<=0.1,infestl*cz[nx-1]+jack*cz[nx],jack*cz[nx])
+  v2=ifelse(Q<=0.1,infestl*cx[nx-1]+jack*cx[nx],jack*cx[nx])
+  
+  s1=s*ifelse(y==0,-((1/dens0)*(pi*(1-pi)*v1*(1-nb0)-(1-pi)*nb0*(phi/(mu+phi))*mu*v2)), -(pi*v1+y*v2-((y+phi)/(mu+phi))*mu*v2))
+  
+  grad_phi=phi*ifelse(y==0,
+                      -(exp(-log(dens0) + log(1 - pi) + log(nb0)) *(log(phi) - log(mu + phi) + 1 - phi/(mu + phi))),
+                      -(digamma(y + phi) - digamma(phi) +log(phi) - log(mu + phi) + 1 - (y + phi)/(mu + phi)))
+  
+  
+  gradient <- colSums(cbind(grad_beta*X,grad_gamma*X,s1, grad_phi))
+  
+  return(gradient)
+}
+#starting point
+library(pscl)
+#outbreak
+#get initial guess
+lodgel=ifelse(d$Q<=0.1,0,infestl)
+jackl=ifelse(d$Q<=0.1,infestl,0)
+
+#initial guess 
+S=1
+X=data.frame(cbind(x_trans,(lodgel-min(lodgel))/(max(infestl)-min(infestl))+S*(jackl-min(jackl))/(max(infestl)-min(infestl)),
+                   (not_jack-min(not_jack))/(max(d$dispersal)-min(d$dispersal))+S*(jack-min(jack))/(max(d$dispersal)-min(d$dispersal))))
+colnames(X)[14:15]=c("last year infestations","dispersal")
+colnames(X)
+model=zeroinfl(y~.|.,data=data.frame(cbind(X,y)),dist='negbin')
+#start=round(c(model$start$count,model$start$zero,log(0.5),log(model$start$theta)),2)
+start=round(c(model$coefficients$count,model$coefficients$zero,log(S),log(model$theta)))
+
+fitn <- optim(fn = neg_logl, gr = grad,#(jack-mean(jack))/sd(d$dispersal);(not_jack-mean(not_jack))/sd(d$dispersal)
+              method = "BFGS",
+              par =start, control= list(trace = 2,maxit = 10000), 
+              x = x_trans, y = y,jack=(jack-min(jack))/(max(d$dispersal)-min(d$dispersal)),
+              not_jack=(not_jack-mean(not_jack))/(max(d$dispersal)-min(d$dispersal)),
+              infestl=fun1(infestl),Q=d$Q)#scale(infestl,center=T,scale=T)
+
+coeff=fitn$par
+names(coeff)=c(names(model$coefficients$count)[-(15:16)],"count last year infestations","count dispersal influence",
+               names(model$coefficients$zero)[-(15:16)],"zero last year infestations","zero dispersal influence","logit(s)","log(phi)")
+coeff[33]
+round(exp(coeff[33]),5)
+
+
+#outbreak (2007-2014)
+d1=d[which(d$year<2015),]
+y1=d1$Infest
+x1=d1[,-c(1:4,12,19,20,21,22,23,24)]
+x_trans1=apply(x1,2,fun1)
+infestl1=d1$infestl
+lodgel1=ifelse(d1$Q<=0.1,0,infestl1)
+jackl1=ifelse(d1$Q<=0.1,infestl1,0)
+not_jack1=d1$i_not_jack
+jack1=d1$i_jack
+#initial guess 
+S=1
+X1=data.frame(cbind(x_trans1,(lodgel1-min(lodgel1))/(max(infestl1)-min(infestl1))+S*(jackl1-min(jackl1))/(max(infestl1)-min(infestl1)),
+                    (not_jack1-min(not_jack1))/(max(d1$dispersal)-min(d1$dispersal))+S*(jack1-min(jack1))/(max(d1$dispersal)-min(d1$dispersal))))
+colnames(X1)[14:15]=c("last year infestations","dispersal")
+colnames(X1)
+model1=zeroinfl(y1~.|.,data=data.frame(cbind(X1,y1)),dist='negbin')
+start1=round(c(model1$coefficients$count,model1$coefficients$zero,log(S),log(model1$theta)))
+
+fitn1 <- optim(fn = neg_logl, gr = grad,#(jack-mean(jack))/sd(d$dispersal);(not_jack-mean(not_jack))/sd(d$dispersal)
+               method = "BFGS",
+               par =start1, control= list(trace = 2,maxit = 10000), 
+               x = x_trans1, y = y1,jack=(jack1-min(jack1))/(max(d1$dispersal)-min(d1$dispersal)),
+               not_jack=(not_jack1-min(not_jack1))/(max(d1$dispersal)-min(d1$dispersal)),
+               infestl=fun1(infestl1),Q=d1$Q)#scale(infestl,center=T,scale=T)
+
+coeff1=fitn1$par
+names(coeff1)=c(names(model1$coefficients$count)[-(15:16)],"count last year infestations","count dispersal influence",
+                names(model1$coefficients$zero)[-(15:16)],"zero last year infestations","zero dispersal influence","logit(s)","log(phi)")
+coeff1[33]
+round(exp(coeff1[33]),5)
+
+
+#endemic (2015-2020)
+d2=d[which(d$year>2014),]
+y2=d2$Infest
+x2=d2[,-c(1:4,12,19,20,21,22,23,24)]
+x_trans2=apply(x2,2,fun1)
+infestl2=d2$infestl
+lodgel2=ifelse(d2$Q<=0.1,0,infestl2)
+jackl2=ifelse(d2$Q<=0.1,infestl2,0)
+not_jack2=d2$i_not_jack
+jack2=d2$i_jack
+#initial guess 
+S=1
+X2=data.frame(cbind(x_trans2,(lodgel2-min(lodgel2))/(max(infestl2)-min(infestl2))+S*(jackl2-min(jackl2))/(max(infestl2)-min(infestl2)),
+                    (not_jack2-min(not_jack2))/(max(d2$dispersal)-min(d2$dispersal))+S*(jack2-min(jack2))/(max(d2$dispersal)-min(d2$dispersal))))
+colnames(X2)[14:15]=c("last year infestations","dispersal")
+colnames(X2)
+model2=zeroinfl(y2~.|.,data=data.frame(cbind(X2,y2)),dist='negbin')
+start2=round(c(model2$coefficients$count,model2$coefficients$zero,log(S),log(model2$theta)))
+
+fitn2 <- optim(fn = neg_logl, gr = grad,#(jack-mean(jack))/sd(d$dispersal);(not_jack-mean(not_jack))/sd(d$dispersal)
+               method = "BFGS",
+               par =start2, control= list(trace = 2,maxit = 10000), 
+               x = x_trans2, y = y2,jack=(jack2-min(jack2))/(max(d2$dispersal)-min(d2$dispersal)),
+               not_jack=(not_jack2-min(not_jack2))/(max(d2$dispersal)-min(d2$dispersal)),
+               infestl=fun1(infestl2),Q=d2$Q)#scale(infestl,center=T,scale=T)
+
+coeff2=fitn2$par
+names(coeff2)=c(names(model2$coefficients$count)[-(15:16)],"count last year infestations","count dispersal influence",
+                names(model2$coefficients$zero)[-(15:16)],"zero last year infestations","zero dispersal influence","logit(s)","log(phi)")
+coeff2[33]
+round(invlogit(coeff2[33]),5)
+
