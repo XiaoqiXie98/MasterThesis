@@ -1,0 +1,262 @@
+setwd("/Users/xiaoqixie/Desktop/Thesis")
+load("Code/Chapter 2/area 1.RData")
+year=as.numeric()
+for(i in 2007:2020){
+  year=c(year,replicate(9810,i))
+}
+load("Code/Chapter 2/dispersal_within_4_excludecell.RData")
+data=cbind(year,data_final,dispersal)
+data1=data[-which(data$mz==0&data$Infestations==0),]
+#remove age squared, height, last year infestations within 0.75, 1.25, and 4
+X=scale(data1[,-c(1:4,9,10,11,14,21,23,24,25,26)],center=T,scale=T)
+colnames(X)[14]="Dispersal influence within 4 km"
+y=data1$Infestations
+year1=data1$year
+
+#grid search 
+
+#
+library(pscl)
+library("mpath")
+library("pbapply")
+library("MASS")
+
+X_fit=X[which(year1<2012),]
+y_fit=y[which(year1<2012)]
+
+func=function(a,x,y,initial){
+  a1=a[1]
+  a2=a[2]
+  zinb=zipath(y~.|.,data = data.frame(cbind(x,y)), 
+              start=initial,
+              family = "negbin",
+              gamma.count=3.7,
+              gamma.zero=3.7,
+              nlambda=100,
+              #lambda.zero.min.ratio= 0.01,
+              maxit=1, 
+              maxit.em=1,
+              maxit.theta=1,
+              convtype= "both", 
+              penalty="snet",
+              parallel=F,#ncore=20,
+              standardize=F,rescale=F,
+              alpha.count=a1,alpha.zero=a2,
+              reltol=0.0001,thresh=0.0001,
+              trace=T,
+              eps.bino=0.00001,
+              theta.fixed=F,
+              init.theta=initial$theta
+  )
+  minBic <- which.min(BIC(zinb))
+  b=c(a1,a2,coef(zinb, minBic),BIC(zinb)[minBic],zinb$loglik[minBic],zinb$theta[minBic])
+  return(b)
+}
+
+
+func1=function(x,y,A,initial){
+  
+  tab=pbapply(A,1,func,x=x,y=y,initial=initial,cl=6)
+  
+  return(tab)
+}
+
+A=expand.grid(seq(0.65, 0.75, 0.01),seq(0.95, 1, 0.01))
+m1=zeroinfl(y_fit~.|.,data=data.frame(cbind(X_fit,y_fit)),dist='negbin')
+initial=list(m1$coefficients$count,m1$coefficients$zero,m1$theta)
+names(initial)=c("count","zero","theta")
+r=func1(X_fit,y_fit,A,initial)
+tab=as.numeric()
+for(j in 1:length(r)){
+  t=unlist(r[[j]])
+  tab=rbind(tab,t)
+}
+#count: 0.68 zero: 1
+
+#weights
+
+func2=function(a,x,y,initial){
+  a1=a[1]
+  a2=a[2]
+  
+  zinb=zipath(y~.|.,data = data.frame(cbind(x,y)), 
+              start=initial,
+              family = "negbin",
+              gamma.count=3.7,
+              gamma.zero=3.7,
+              nlambda=100,
+              #lambda.zero.min.ratio= 0.01,
+              maxit=1, 
+              maxit.em=1,
+              maxit.theta=1,
+              convtype= "both", 
+              penalty="snet",
+              parallel=F,#ncore=20,
+              standardize=F,rescale=F,
+              alpha.count=a1,alpha.zero=a2,
+              reltol=0.0001,thresh=0.0001,
+              trace=T,
+              eps.bino=0.00001,
+              theta.fixed=F,
+              init.theta=initial$theta
+  )
+  return(zinb)
+}
+m1=zeroinfl(y_fit~.|.,data=data.frame(cbind(X_fit,y_fit)),dist='negbin')
+initial=list(m1$coefficients$count,m1$coefficients$zero,m1$theta) 
+names(initial)=c("count","zero","theta")
+ZINB=func2(c(0.68,1),X_fit,y_fit,initial)
+
+#Model Validation
+
+#functions
+
+###############################################################
+library("emdbook")
+#return the non-standardized coefficients with their value ranges
+f1=function(beta0,coeff,data){
+  mu=apply(data,2,mean)
+  std=apply(data,2,sd)
+  intercept=beta0-sum(coeff*mu/std)
+  beta=coeff/std
+  return(c(intercept,beta))
+}
+severity<-function(y){
+  S<-numeric()
+  
+  loc0=which(y==0)
+  S[loc0]=0
+  
+  loc1=which(y>0&y<4)
+  S[loc1]=1
+  
+  loc2=which(y>3&y<26)
+  S[loc2]=2
+  
+  loc3=which(y>25)
+  S[loc3]=3
+  return(S)
+}
+accuracy=function(y,yhat){
+  return(length(which(y==yhat))/length(y))
+}
+
+RMSE=function(y,yhat){
+  a=mean((y-yhat)^2)
+  print(a)
+  return(sqrt(a))
+}
+
+cdfzinb<-function(x,z,cx,cz,theta){
+  n=dim(x)[1]
+  cdf0<-dzinbinom(rep(0,n),exp(x%*%cx),rep(theta,n),exp(z%*%cz)/(1+exp(z%*%cz)))
+  cdf1<-0
+  for(i in 1:3){
+    cdf1<-cdf1+dzinbinom(rep(i,n),exp(x%*%cx),rep(theta,n),exp(z%*%cz)/(1+exp(z%*%cz)))
+  }
+  cdf2<-0
+  for( i in 4:25){
+    cdf2<-cdf2+dzinbinom(rep(i,n),exp(x%*%cx),rep(theta,n),exp(z%*%cz)/(1+exp(z%*%cz)))
+  }
+  cdf3<-1-cdf0-cdf1-cdf2
+  d<-cbind(cdf0,cdf1,cdf2,cdf3)
+  colnames(d)<-c("0","1","2","3")
+  return(d)
+}
+
+predictionzinb<-function(X,Z,cx,cz,theta){
+  p<-cdfzinb(X,Z,cx,cz,theta)
+  maxprob<-apply(p,1,max)
+  position<-max.col(p)-1
+  return(cbind(position,maxprob))
+}
+
+loc=which.min(BIC(ZINB))
+b=c(coef(ZINB, loc),ZINB$loglik[loc])
+
+data_fit=data1[which(year1<2012),-c(1:4,9,10,11,14,21,23,24,25,26)]
+coe=unlist(b[1])
+b[1]=list(f1(as.numeric(coe[1]),as.numeric(coe[-1]),data_fit))
+coe=unlist(b[2])
+b[2]=list(f1(as.numeric(coe[1]),as.numeric(coe[-1]),data_fit))
+
+data_pred=data[which(data$year>2011&data$year<2014),-c(1:4,9,10,11,14,21,23,24,25,26)]
+y_pred=data$Infestations[which(data$year>2011&data$year<2014)]
+#accuracy
+prediction=predictionzinb(as.matrix(cbind(1,data_pred)),as.matrix(cbind(1,data_pred)),as.numeric(unlist(b[1])),as.numeric(unlist(b[2])),ZINB$theta[loc])
+sev=severity(y_pred)
+X_1213=data[which(data$year>2011&data$year<2014),]
+loc1=which(X_1213$mz==0&X_1213$Infestations==0)
+acc=accuracy(sev[-loc1],prediction[-loc1,1])
+acc
+pred=as.numeric(prediction[,1])
+#MAD
+RMSE(sev[-loc1],pred[-loc1])
+#acc:0.73,rmse:1.07
+cm<-function(predicted,s){
+  cm<-matrix(0,nrow=4,ncol=4)
+  predicted=predicted+1
+  s=s+1
+  for(i in 1:length(s)){
+    cm[s[i],predicted[i]]<-cm[s[i],predicted[i]]+1
+  }
+  colnames(cm)=c("fitted 0","fitted 1","fitted 2","fitted 3")
+  rownames(cm)=c("observed 0","observed 1","observed 2","observed 3")
+  return(cm)
+}
+tab=cm(pred[-loc1],sev[-loc1])
+tab
+apply(tab,1,sum)
+library(ggplot2)
+library(viridis)
+my_palette <- viridis(4, option = "A")
+X_12=X_1213[which(X_1213$year==2012),]
+X_13=X_1213[which(X_1213$year==2013),]
+loc2=which(X_12$mz==0&X_12$Infestations==0)
+loc3=which(X_13$mz==0&X_13$Infestations==0)
+p12=round(pred)[1:9810]
+p13=round(pred)[9811:19620]
+d=data.frame(cbind(X_12[-loc2,2:3],p12[-loc2]))
+colnames(d)=c("x","y","Severity")
+d$`Severity`=as.factor(d$`Severity`)
+p=ggplot(data=d,aes(x,y,fill=`Severity`))+
+  geom_raster()+
+  scale_fill_manual(values = my_palette[-2]) +
+  theme_void() + 
+  theme(
+    axis.text.x = element_blank(),
+    axis.text.y = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.ticks.y = element_blank(),
+    legend.key.height = unit(0.13, "npc"), # Set the legend key height to match the plot
+    legend.title = element_text(size = 24),
+    legend.text = element_text(size = 24)
+  )
+p
+#nam1=paste("/Users/xiaoqixie/Desktop/Mountain Pine Beetle/Chapter 2/standardized plots/area1_pred_2012_zinb_std")
+#nam1=paste(nam1,".pdf",sep="")
+#ggsave(nam1, plot = p, device = "pdf", width = 10, height = 8)
+d=data.frame(cbind(X_13[-loc3,2:3],p13[-loc3]))
+colnames(d)=c("x","y","Severity")
+d$`Severity`=as.factor(d$`Severity`)
+p=ggplot(data=d,aes(x,y,fill=`Severity`))+
+  geom_raster()+
+  scale_fill_manual(values = my_palette[-2]) +
+  theme_void() + 
+  theme(
+    axis.text.x = element_blank(),
+    axis.text.y = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.ticks.y = element_blank(),
+    legend.key.height = unit(0.13, "npc"), # Set the legend key height to match the plot
+    legend.title = element_text(size = 24),
+    legend.text = element_text(size = 24)
+  )
+p
+#nam1=paste("/Users/xiaoqixie/Desktop/Mountain Pine Beetle/Chapter 2/standardized plots/area1_pred_2013_zinb_std")
+#nam1=paste(nam1,".pdf",sep="")
+#ggsave(nam1, plot = p, device = "pdf", width = 10, height = 8)
