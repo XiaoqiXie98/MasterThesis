@@ -1,0 +1,424 @@
+setwd("/Users/xiaoqixie/Desktop/Thesis")
+load("Code/Chapter 2/area 1.RData")
+year=as.numeric()
+for(i in 2007:2020){
+  year=c(year,replicate(9810,i))
+}
+#add year
+data=cbind(year,data_final)
+data1=data[-which(data$mz==0&data$Infestations==0),]
+
+#remove unused columns and standardize data 
+X=scale(data1[,-c(1:4,11,14,21,26)],center=T,scale=T)
+colnames(X)
+y=data1$Infestations
+year1=data1$year
+
+#split data based on dynamics
+data1_outbreak=data1[which(year1<2015),-c(1:4,11,14,21,26)]
+data1_endemic=data1[which(year1>2014),-c(1:4,11,14,21,26)]
+#outbreak
+X1=X[which(year1<2015),]
+y1=y[which(year1<2015)]
+
+#grid search
+library("mpath")
+func=function(a,x,y,initial){
+  a1=a[1]
+  a2=a[2]
+  zip=zipath(y~.|.,data = data.frame(cbind(x,y)), 
+             start=initial,
+             family = "poisson",
+             gamma.count=3.7,
+             gamma.zero=3.7,
+             nlambda=100,
+             #lambda.zero.min.ratio= 0.01,
+             maxit=1, 
+             maxit.em=1,
+             maxit.theta=1,
+             convtype= "both", 
+             penalty="snet",
+             parallel=F,
+             standardize=F,rescale=F,
+             alpha.count=a1,alpha.zero=a2,
+             reltol=0.0001,thresh=0.0001,
+             #trace=T,
+             eps.bino=0.00001
+  )
+  minBic <- which.min(BIC(zip))
+  b=c(a1,a2,coef(zip, minBic),BIC(zip)[minBic],zip$loglik[minBic])
+  return(b)
+}
+library(pscl)
+library("pbapply")
+m1=zeroinfl(y1~.|.,data=data.frame(cbind(X1,y1)),dist='poisson')
+initial=list(m1$coefficients$count,m1$coefficients$zero)
+names(initial)=c("count","zero")
+A=expand.grid(seq(0.7, 0.8, 0.01),seq(0.95, 1, 0.01))
+tab=pbapply(A,1,func,x=X1,y=y1,initial=initial,cl=6)
+tab1=as.numeric()
+for(i in 1:dim(A)[1]){
+  tab1=rbind(tab1,unlist(tab[[i]]))
+}
+#the optimal is count 0.75 zero 1 (standardized)
+#endemic
+X2=X[which(year1>2014),]
+y2=y[which(year1>2014)]
+m2=zeroinfl(y2~.|.,data=data.frame(cbind(X2,y2)),dist='poisson')
+initial=list(m2$coefficients$count,m2$coefficients$zero)
+names(initial)=c("count","zero")
+A=expand.grid(seq(0.65, 0.75, 0.01),seq(0.9, 1, 0.01))
+tab=pbapply(A,1,func,x=X2,y=y2,initial=initial,cl=6)
+tab1=as.numeric()
+for(i in 5:dim(A)[1]){
+  tab1=rbind(tab1,unlist(tab[[i]]))
+}
+
+#endemic count 0.72 zero 0.96 (standardized)
+model1=zipath(y1~.|.,data = data.frame(cbind(X1,y1)), 
+              #start=sn,
+              family = "poisson",
+              gamma.count=3.7,
+              gamma.zero=3.7,
+              nlambda=100,
+              #lambda.zero.min.ratio= 0.01,
+              maxit=1, 
+              maxit.em=1,
+              maxit.theta=1,
+              convtype= "both", 
+              penalty="snet",
+              parallel=F,
+              standardize=F,rescale=F,
+              alpha.count=0.75,alpha.zero=1,
+              reltol=0.0001,thresh=0.0001,
+              trace=T,
+              eps.bino=0.00001
+)
+
+model2=zipath(y2~.|.,data = data.frame(cbind(X2,y2)), 
+              #start=sn,
+              family = "poisson",
+              gamma.count=3.7,
+              gamma.zero=3.7,
+              nlambda=100,
+              #lambda.zero.min.ratio= 0.01,
+              maxit=1, 
+              maxit.em=1,
+              maxit.theta=1,
+              convtype= "both", 
+              penalty="snet",
+              parallel=F,
+              standardize=F,rescale=F,
+              alpha.count=0.72,alpha.zero=0.96,
+              reltol=0.0001,thresh=0.0001,
+              trace=T,
+              eps.bino=0.00001
+)
+
+cx=coef(model1, which.min(BIC(model1)))$count
+cf=round(cx,5)
+SE=se(model1, which=which.min(model1$bic))
+
+margin=round(qnorm(0.975)*SE$count[-1],5)
+cf2=cf
+ci_lower=cf2[-1]-margin
+ci_upper=cf2[-1]+margin
+CI1=data.frame(cbind(names(cf2[-1]),cf2[-1],ci_lower,ci_upper))
+colnames(CI1)=c("Name","cf","lower","upper")
+CI1$Name=names(cf2)[-1]
+CI1$cf=as.numeric(CI1$cf)
+CI1$lower=as.numeric(CI1$lower)
+CI1$upper=as.numeric(CI1$upper)
+CI1$Name=as.factor(CI1$Name)
+#look for covariates relating to the hypotheses
+CI2=CI1[c(4,5,6,15,16,17,18),]
+CI2$Name=c("Age","Age square","Height","Last year infestations within cell","Last year infestations within 0.75 km","Last year infestations within 1.25 km","Disperal influence within 4 km")
+CI2 <- CI2[order(-CI2$cf), ]
+
+CI3=CI1[-c(4,5,6,15,16,17,18),]
+CI3$Name=c("Northness","Eastness","Slope","Pine density",
+           "Minimum temperature in summer","Maximum temperature in summer",
+           "Relative humidity","Wind speed","Soil moisture index",
+           "Degree days","Overwinter survival rate")
+CI3 <- CI3[order(-CI3$cf), ]
+
+name_order=CI2$Name
+name_order1=CI3$Name
+library(ggplot2)
+library(forcats)
+
+p=ggplot(CI2, aes(x=cf, y=reorder(Name, cf))) +
+  geom_point(size=6) + # Points for cf values
+  geom_vline(xintercept = 0, linetype = "dashed", color = "black", linewidth = 1) +
+  geom_errorbarh(aes(xmin=lower, xmax=upper), height=1) + # Horizontal error bars for CIs
+  labs(title="Abundance Model in Outbreak",x="Coefficient Value") +
+  theme_minimal() + 
+  theme(
+    axis.text.x = element_text(size=22),
+    #axis.text.y = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.ticks.y = element_blank(),
+    axis.text.y = element_text(size = 24) ,
+    plot.title = element_text(size = 24, hjust = 0.5)
+  )
+p
+#nam1=paste("/Users/xiaoqixie/Desktop/Mountain Pine Beetle/Chapter 2/standardized plots/area1_outbreak_ci_ZIP_count_std")
+#nam1=paste(nam1,".pdf",sep="")
+#ggsave(nam1, plot = p, device = "pdf", width = 12, height = 8)
+
+p=ggplot(CI3, aes(x=cf, y=reorder(Name, cf))) +
+  geom_point(size=6) + # Points for cf values
+  geom_vline(xintercept = 0, linetype = "dashed", color = "black", linewidth = 1) +
+  geom_errorbarh(aes(xmin=lower, xmax=upper), height=1) + # Horizontal error bars for CIs
+  labs(title="Abundance Model in Outbreak",x="Coefficient Value") +
+  theme_minimal() + 
+  theme(
+    axis.text.x = element_text(size=22),
+    #axis.text.y = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.ticks.y = element_blank(),
+    axis.text.y = element_text(size = 24) ,
+    plot.title = element_text(size = 24, hjust = 0.5)
+  )
+p
+#nam1=paste("/Users/xiaoqixie/Desktop/Mountain Pine Beetle/Chapter 2/standardized plots/area1_outbreak_ci_ZIP_count_std1")
+#nam1=paste(nam1,".pdf",sep="")
+#ggsave(nam1, plot = p, device = "pdf", width = 12, height = 8)
+
+cz=-coef(model1, which.min(BIC(model1)))$zero
+loc=which(cz==0)
+cz1=cz[-loc]
+cf=round(cz1,5)
+margin=round(qnorm(0.975)*SE$zero[-1],5)
+cf2=cf
+ci_lower=cf2[-1]-margin
+ci_upper=cf2[-1]+margin
+CI=data.frame(cbind(names(cf2[-1]),cf2[-1],ci_lower,ci_upper))
+colnames(CI)=c("Name","cf","lower","upper")
+CI$Name=names(cf2)[-1]
+CI$cf=as.numeric(CI$cf)
+CI$lower=as.numeric(CI$lower)
+CI$upper=as.numeric(CI$upper)
+CI$Name=as.factor(CI$Name)
+#look for covariates relating to the hypotheses
+CI=CI[c(5:6),]
+CI$Name=c("Last year infestations within cell","Last year infestations within 0.75 km")
+#CI <- CI[c(2,3,1), ]
+unique_names <- unique(CI$Name)
+
+# Set the order for the factor
+CI$Name <- factor(CI$Name, levels = rev(nam_order))
+
+CI01=CI[-c(5:6),]
+CI01$Name=c("Minimum temperature in summer","Maximum temperature in summer","Wind Speed",
+            "Overwinter survival rate")
+#CI <- CI[c(2,3,1), ]
+unique_names <- unique(CI01$Name)
+
+# Set the order for the factor
+CI01$Name <- factor(CI01$Name, levels = rev(nam_order1))
+
+library(forcats)
+
+p=ggplot(CI, aes(x=cf, y=Name)) +
+  geom_point(size=6) + # Points for cf values
+  geom_vline(xintercept = 0, linetype = "dashed", color = "black", linewidth = 1) +
+  geom_errorbarh(aes(xmin=lower, xmax=upper), height=1) + # Horizontal error bars for CIs
+  labs(title="Presence Model in Outbreak ",x="Coefficient Value") +
+  theme_minimal() + 
+  theme(
+    axis.text.x = element_text(size=22),
+    #axis.text.y = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.ticks.y = element_blank(),
+    axis.text.y = element_text(size = 24) ,
+    plot.title = element_text(size = 24, hjust = 0.5)
+  )
+p
+#nam1=paste("/Users/xiaoqixie/Desktop/Mountain Pine Beetle/Chapter 2/standardized plots/area1_outbreak_ci_ZIP_zero_std")
+#nam1=paste(nam1,".pdf",sep="")
+#ggsave(nam1, plot = p, device = "pdf", width = 12, height = 8)
+
+p=ggplot(CI01, aes(x=cf, y=Name)) +
+  geom_point(size=6) + # Points for cf values
+  geom_vline(xintercept = 0, linetype = "dashed", color = "black", linewidth = 1) +
+  geom_errorbarh(aes(xmin=lower, xmax=upper), height=1) + # Horizontal error bars for CIs
+  labs(title="Presence Model in Outbreak ",x="Coefficient Value") +
+  theme_minimal() + 
+  theme(
+    axis.text.x = element_text(size=22),
+    #axis.text.y = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.ticks.y = element_blank(),
+    axis.text.y = element_text(size = 24) ,
+    plot.title = element_text(size = 24, hjust = 0.5)
+  )
+p
+#nam1=paste("/Users/xiaoqixie/Desktop/Mountain Pine Beetle/Chapter 2/standardized plots/area1_outbreak_ci_ZIP_zero_std1")
+#nam1=paste(nam1,".pdf",sep="")
+#ggsave(nam1, plot = p, device = "pdf", width = 12, height = 8)
+
+#endemic stage
+cx=coef(model2, which.min(BIC(model2)))$count
+#loc=which(cx==0)
+#cx1=cx[-loc]
+cf=round(cx,5)
+SE=se(model2, which=which.min(model2$bic))
+
+margin=round(qnorm(0.975)*SE$count[-1],5)
+cf2=cf
+ci_lower=cf2[-1]-margin
+ci_upper=cf2[-1]+margin
+CI1=data.frame(cbind(names(cf2[-1]),cf2[-1],ci_lower,ci_upper))
+colnames(CI1)=c("Name","cf","lower","upper")
+CI1$Name=names(cf2)[-1]
+CI1$cf=as.numeric(CI1$cf)
+CI1$lower=as.numeric(CI1$lower)
+CI1$upper=as.numeric(CI1$upper)
+CI1$Name=as.factor(CI1$Name)
+#look for covariates relating to the hypotheses
+CI2=CI1[c(4:6,15:18),]
+CI2$Name=c("Age","Age square","Height","Last year infestations within cell","Last year infestations within 0.75 km","Last year infestations within 1.25 km","Disperal influence within 4 km")
+#CI2 <- CI2[c(2,3,1), ]
+unique_names <- unique(CI2$Name)
+
+# Set the order for the factor
+CI2$Name <- factor(CI2$Name, levels = rev(name_order))
+
+#
+CI3=CI1[-c(4:6,15:18),]
+CI3$Name=c("Northness","Eastness","Slope","Pine density",
+           "Minimum temperature in summer","Maximum temperature in summer",
+           "Relative humidity","Wind speed","Soil moisture index","Degree days",
+           "Overwinter survival rate")
+# Set the order for the factor
+CI3$Name <- factor(CI3$Name, levels = rev(name_order1))
+
+library(ggplot2)
+library(forcats)
+
+p=ggplot(CI2, aes(x=cf, y=Name)) +
+  geom_point(size=6) + # Points for cf values
+  geom_vline(xintercept = 0, linetype = "dashed", color = "black", linewidth = 1) +
+  geom_errorbarh(aes(xmin=lower, xmax=upper), height=1) + # Horizontal error bars for CIs
+  labs(title="Abundance Model in Growth Peak Declining",x="Coefficient Value") +
+  theme_minimal() + 
+  theme(
+    axis.text.x = element_text(size=22),
+    #axis.text.y = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.ticks.y = element_blank(),
+    axis.text.y = element_text(size = 24) ,
+    plot.title = element_text(size = 24, hjust = 0.5)
+  )
+p
+#nam1=paste("/Users/xiaoqixie/Desktop/Mountain Pine Beetle/Chapter 2/standardized plots/area1_endemic_ci_ZIP_count_std")
+#nam1=paste(nam1,".pdf",sep="")
+#ggsave(nam1, plot = p, device = "pdf", width = 12, height = 8)
+
+p=ggplot(CI3, aes(x=cf, y=Name)) +
+  geom_point(size=6) + # Points for cf values
+  geom_vline(xintercept = 0, linetype = "dashed", color = "black", linewidth = 1) +
+  geom_errorbarh(aes(xmin=lower, xmax=upper), height=1) + # Horizontal error bars for CIs
+  labs(title="Abundance Model in Growth Peak Declining",x="Coefficient Value") +
+  theme_minimal() + 
+  theme(
+    axis.text.x = element_text(size=22),
+    #axis.text.y = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.ticks.y = element_blank(),
+    axis.text.y = element_text(size = 24) ,
+    plot.title = element_text(size = 24, hjust = 0.5)
+  )
+p
+#nam1=paste("/Users/xiaoqixie/Desktop/Mountain Pine Beetle/Chapter 2/standardized plots/area1_endemic_ci_ZIP_count_std1")
+#nam1=paste(nam1,".pdf",sep="")
+#ggsave(nam1, plot = p, device = "pdf", width = 12, height = 8)
+
+cz=-coef(model2, which.min(BIC(model2)))$zero
+loc=which(cz==0)
+cz1=cz[-loc]
+cf=round(cz1,5)
+#cf1=f1(cf[1],cf[-1],data1_endemic[,-(loc-1)])
+#cf2=f2(cf1[1],cf1[-1],data1_endemic[,-(loc-1)])
+#se=round((SE$zero[-1]/abs(ma[-(loc-1)]-mi[-(loc-1)]))*apply(data1_endemic[,-(loc-1)],2,sd),5)
+margin=round(qnorm(0.975)*SE$zero[-1],5)
+cf2=cf
+ci_lower=cf2[-1]-margin
+ci_upper=cf2[-1]+margin
+CI=data.frame(cbind(names(cf2[-1]),cf2[-1],ci_lower,ci_upper))
+colnames(CI)=c("Name","cf","lower","upper")
+CI$Name=names(cf2)[-1]
+CI$cf=as.numeric(CI$cf)
+CI$lower=as.numeric(CI$lower)
+CI$upper=as.numeric(CI$upper)
+CI$Name=as.factor(CI$Name)
+#look for covariates relating to the hypotheses
+CI=CI[c(4:6),]
+CI$Name=c("Last year infestations within cell","Last year infestations within 0.75 km","Disperal influence within 4 km")
+#CI <- CI[c(2,3,1), ]
+unique_names <- unique(CI$Name)
+
+# Set the order for the factor
+CI$Name <- factor(CI$Name, levels = rev(name_order))
+
+#####
+CI01=CI[-c(4:6),]
+CI01$Name=c("Relative humidity","Wind speed","Overwinter survival rate")
+CI01$Name <- factor(CI01$Name, levels = rev(name_order1))
+
+library(forcats)
+
+p=ggplot(CI, aes(x=cf, y=Name)) +
+  geom_point(size=6) + # Points for cf values
+  geom_vline(xintercept = 0, linetype = "dashed", color = "black", linewidth = 1) +
+  geom_errorbarh(aes(xmin=lower, xmax=upper), height=1) + # Horizontal error bars for CIs
+  labs(title="Presence Model in Growth Peak Declining ",x="Coefficient Value") +
+  theme_minimal() + 
+  theme(
+    axis.text.x = element_text(size=22),
+    #axis.text.y = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.ticks.y = element_blank(),
+    axis.text.y = element_text(size = 24) ,
+    plot.title = element_text(size = 24, hjust = 0.5)
+  )
+p
+#nam1=paste("/Users/xiaoqixie/Desktop/Mountain Pine Beetle/Chapter 2/standardized plots/area1_endemic_ci_ZIP_zero_std")
+#nam1=paste(nam1,".pdf",sep="")
+#ggsave(nam1, plot = p, device = "pdf", width = 12, height = 8)
+
+p=ggplot(CI01, aes(x=cf, y=Name)) +
+  geom_point(size=6) + # Points for cf values
+  geom_vline(xintercept = 0, linetype = "dashed", color = "black", linewidth = 1) +
+  geom_errorbarh(aes(xmin=lower, xmax=upper), height=1) + # Horizontal error bars for CIs
+  labs(title="Presence Model in Growth Peak Declining ",x="Coefficient Value") +
+  theme_minimal() + 
+  theme(
+    axis.text.x = element_text(size=22),
+    #axis.text.y = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.ticks.y = element_blank(),
+    axis.text.y = element_text(size = 24) ,
+    plot.title = element_text(size = 24, hjust = 0.5)
+  )
+p
+#nam1=paste("/Users/xiaoqixie/Desktop/Mountain Pine Beetle/Chapter 2/standardized plots/area1_endemic_ci_ZIP_zero_std1")
+#nam1=paste(nam1,".pdf",sep="")
+#ggsave(nam1, plot = p, device = "pdf", width = 12, height = 8)
