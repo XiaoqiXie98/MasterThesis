@@ -1,0 +1,258 @@
+setwd("/Users/xiaoqixie/Desktop/Thesis")
+load("Code/Chapter 2/area 1.RData")
+year=as.numeric()
+for(i in 2007:2020){
+  year=c(year,replicate(9810,i))
+}
+load("Code/Chapter 2/dispersal_within_4_excludecell.RData")
+data=cbind(year,data_final,dispersal)
+data1=data[-which(data$mz==0&data$Infestations==0),]
+#remove age squared, height, last year infestations within 0.75, 1.25, and 4
+X=scale(data1[,-c(1:4,9,10,11,14,21,23,24,25,26)],center=T,scale=T)
+colnames(X)[14]="Dispersal influence within 4 km"
+y=data1$Infestations
+year1=data1$year
+#outbreak(2007-2014)
+X1=X[which(year1<2015),]
+y1=y[which(year1<2015)]
+
+#growth peak declining(2015-2020)
+X2=X[which(year1>2014),]
+y2=y[which(year1>2014)]
+
+#For the zero-inflated poisson model, the optimal weights are (count:0.65, zero:1) in the outbreak stage and (count:0.43,zero:0.95) in the growth peak declining.
+library(pscl)
+library(mpath)
+m1=zeroinfl(y1~.|.,data=data.frame(cbind(X1,y1)),dist='poisson')
+initial=list(m1$coefficients$count,m1$coefficients$zero)
+names(initial)=c("count","zero")
+zip1=zipath(y1~.|.,data = data.frame(cbind(X1,y1)), 
+            start=initial,
+            family = "poisson",
+            gamma.count=3.7,
+            gamma.zero=3.7,
+            nlambda=100,
+            #lambda.zero.min.ratio= 0.01,
+            maxit=1, 
+            maxit.em=1,
+            maxit.theta=1,
+            convtype= "both", 
+            penalty="snet",
+            parallel=F,
+            standardize=F,rescale=F,
+            alpha.count=0.65,alpha.zero=1,
+            reltol=0.0001,thresh=0.0001,
+            trace=T,
+            eps.bino=0.00001
+)
+
+m2=zeroinfl(y2~.|.,data=data.frame(cbind(X2,y2)),dist='poisson')
+initial=list(m2$coefficients$count,m2$coefficients$zero)
+names(initial)=c("count","zero")
+zip2=zipath(y2~.|.,data = data.frame(cbind(X2,y2)), 
+            start=initial,
+            family = "poisson",
+            gamma.count=3.7,
+            gamma.zero=3.7,
+            nlambda=100,
+            #lambda.zero.min.ratio= 0.01,
+            maxit=1, 
+            maxit.em=1,
+            maxit.theta=1,
+            convtype= "both", 
+            penalty="snet",
+            parallel=F,
+            standardize=F,rescale=F,
+            alpha.count=0.43,alpha.zero=0.95,
+            reltol=0.0001,thresh=0.0001,
+            trace=T,
+            eps.bino=0.00001
+)
+#BIC
+BIC(zip1)[which.min(BIC(zip1))]
+BIC(zip2)[which.min(BIC(zip2))]
+#Log-likelihood
+zip1$loglik[which.min(BIC(zip1))]
+zip2$loglik[which.min(BIC(zip2))]
+
+mucount1<-exp(cbind(1,X1)%*%zip1$coefficients$count[,which.min(BIC(zip1))])
+mucount2<-exp(cbind(1,X2)%*%zip2$coefficients$count[,which.min(BIC(zip2))])
+
+library(pbapply)
+library(LaplacesDemon)
+pi1<-invlogit(cbind(1,X1)%*%zip1$coefficients$zero[,which.min(BIC(zip1))])
+pi2<-invlogit(cbind(1,X2)%*%zip2$coefficients$zero[,which.min(BIC(zip2))])
+
+library("VGAM")
+param1=cbind(mucount1,pi1)
+param2=cbind(mucount2,pi2)
+func=function(param){#mu and count are numbers
+  mucount=param[1]
+  pi=param[2]
+  randomzip=rzipois(100, lambda = mucount, pstr0 = pi)
+  return(randomzip)
+}
+randomzip1=pbapply(param1,1,func,cl=6)
+randomzip2=pbapply(param2,1,func,cl=6)
+
+RQRZIP<-function(mu,y,pi){
+  cdf<-numeric()
+  Fn=as.numeric()
+  for(i in 1:length(mu)){
+    print(i)
+    if(y[i]==0){
+      pdf<-pzipois(0,mu[i],pi[i])
+      Fn<-c(Fn,pdf*runif(1,min=0,max=1))
+      
+    }else{
+      pdf<-dzipois(y[i],mu[i],pi[i])
+      cdf=pzipois(y[i]-1,mu[i],pi[i])
+      Fn<-c(Fn,cdf+pdf*runif(1,min=0,max=1))
+    }
+    
+  }
+  
+  Fn<-round(Fn,digits=5)
+  Z<-qnorm(Fn,mean=0,sd=1)
+  l<-numeric()
+  p1<-which(Z<Inf)
+  p2<-which(Z>-Inf)
+  Z<-Z[which(Z<Inf)]
+  Z<-Z[which(Z>-Inf)]
+  RQ<-(Z-mean(Z))/as.numeric(sqrt(var(Z)))
+  l<-cbind(intersect(p1,p2),RQ)
+  return(l)
+}
+
+func=function(x,random_num){#x is the data without response variable and random_num is the generated y
+  datan=cbind(x,random_num)#create new data
+  colnames(datan)=c(colnames(x),"y")
+  refit<-zeroinfl(y~.,data=data.frame(datan),dist='poisson')
+  mucountn<-exp(cbind(1,x)%*%refit$coefficients$count)
+  pin<-invlogit(cbind(1,x)%*%refit$coefficients$zero)
+  t=rep(-100,dim(x)[1])
+  k<-RQRZIP(mucountn,random_num,pin)
+  t[1:length(k[,2])]<-sort(k[,2])
+  return(t)
+}
+
+t1=pbapply(randomzip1,1,func,x=X1,cl=6)
+dim(t1)
+t2=pbapply(randomzip2,1,func,x=X2,cl=6)
+dim(t2)
+
+func1=function(t_row){#input is each row of t
+  print(j)
+  m<-t_row
+  m<-m[which(m!=-100)]
+  l<-c(quantile(sort(m),probs=0.025),quantile(sort(m),probs=0.975))
+  return(l)
+  #df<-rbind(df,l)
+}
+df1=pbapply(t1,1,func1,cl=6)
+dim(df1)
+df1=t(df1)
+
+df2=pbapply(t2,1,func1,cl=6)
+df2=t(df2)
+
+P1=RQRZIP(mucount1,y1,pi1)
+P2=RQRZIP(mucount2,y2,pi2)
+
+library("ggplot2")
+#plot for two stages
+tab=data.frame(cbind(round(mucount1[P1[,1]],2),P1[,2]))
+colnames(tab)=c("Fitted value","RQR")
+p=ggplot(aes(`Fitted value`,RQR),data=tab)+
+  geom_point()+
+  geom_abline(slope=0,intercept=0,col="red")+
+  ggtitle("Outbreak")+
+  theme_minimal() +
+  theme(
+    axis.text.y = element_text(size = 20,angle = 0, hjust = 0),
+    axis.text.x = element_text(size = 18),
+    axis.ticks.y = element_line(size = 0.5),
+    axis.title.y = element_text(size = 16),
+    axis.title=element_text(size=16,face="bold"), 
+    plot.title = element_text(size = 24, hjust = 0.5))
+p
+
+#nam1=paste("/Users/xiaoqixie/Desktop/Mountain Pine Beetle/Chapter 2/RQR_zip_outbreak_std")
+#nam1=paste(nam1,".pdf",sep="")
+#ggsave(nam1, plot = p, device = "pdf", width = 12, height = 8)
+
+tab=data.frame(cbind(round(mucount2[P2[,1]],2),P2[,2]))
+colnames(tab)=c("Fitted value","RQR")
+p=ggplot(aes(`Fitted value`,RQR),data=tab)+
+  geom_point()+
+  geom_abline(slope=0,intercept=0,col="red")+
+  ggtitle("Growth Peak Declining")+
+  theme_minimal() +
+  theme(
+    axis.text.y = element_text(size = 20,angle = 0, hjust = 0),
+    axis.text.x = element_text(size = 18),
+    axis.ticks.y = element_line(size = 0.5),
+    axis.title.y = element_text(size = 16),
+    axis.title=element_text(size=16,face="bold"), 
+    plot.title = element_text(size = 24, hjust = 0.5))
+p
+
+#nam1=paste("/Users/xiaoqixie/Desktop/Mountain Pine Beetle/Chapter 2/RQR_zip_endemic_std")
+#nam1=paste(nam1,".pdf",sep="")
+#ggsave(nam1, plot = p, device = "pdf", width = 12, height = 8)
+########################################################################
+nq1<-normqua(c(1:length(P1[,1])),length(P1[,1]))
+nq2<-normqua(c(1:length(df1[,1])),length(df1[,1]))
+plot_data <- data.frame(
+  quantile = c(nq2[P1[,1]], nq1, nq2[P1[,1]]),
+  RQR = c(df1[P1[,1],1], sort(P1[,2]), df1[P1[,1],2]),
+  type = factor(rep(1:3, each=length(nq2[P1[,1]])), labels = c("type1", "type2", "type3"))
+)
+p1=ggplot(plot_data, aes(x=quantile, y=RQR, group=type)) +
+  geom_line(data = plot_data[plot_data$type %in% c("type1", "type3"), ], aes(color=type)) +
+  geom_point(data = plot_data[plot_data$type == "type2", ]) +
+  scale_color_manual(values = c("type1" = "red", "type2" = "black", "type3" = "red")) +
+  geom_abline(intercept = 0, slope = 1,color="yellow") +
+  labs(x="Standard Quantile", y="RQR") +
+  ggtitle("QQ plot with 95% Confidence Interval in Outbreak")+
+  theme_minimal() +
+  theme(
+    axis.text.y = element_text(size = 20,angle = 0, hjust = 0),
+    axis.text.x = element_text(size = 18),
+    axis.ticks.y = element_line(size = 0.5),
+    axis.title.y = element_text(size = 16),
+    axis.title=element_text(size=16,face="bold"),
+    legend.position = "none", 
+    plot.title = element_text(size = 24, hjust = 0.5))
+p1
+#nam1=paste("/Users/xiaoqixie/Desktop/Mountain Pine Beetle/Chapter 2/QQ_zip_outbreak_std")
+#nam1=paste(nam1,".pdf",sep="")
+#ggsave(nam1, plot = p1, device = "pdf", width = 12, height = 8)
+
+nq1<-normqua(c(1:length(P2[,1])),length(P2[,1]))
+nq2<-normqua(c(1:length(df2[,1])),length(df2[,1]))
+plot_data <- data.frame(
+  quantile = c(nq2[P2[,1]], nq1, nq2[P2[,1]]),
+  RQR = c(df2[P2[,1],1], sort(P2[,2]), df2[P2[,1],2]),
+  type = factor(rep(1:3, each=length(nq2[P2[,1]])), labels = c("type1", "type2", "type3"))
+)
+p1=ggplot(plot_data, aes(x=quantile, y=RQR, group=type)) +
+  geom_line(data = plot_data[plot_data$type %in% c("type1", "type3"), ], aes(color=type)) +
+  geom_point(data = plot_data[plot_data$type == "type2", ]) +
+  scale_color_manual(values = c("type1" = "red", "type2" = "black", "type3" = "red")) +
+  geom_abline(intercept = 0, slope = 1,color="yellow") +
+  labs(x="Standard Quantile", y="RQR") +
+  ggtitle("QQ plot with 95% Confidence Interval in Growth Peak Declining")+
+  theme_minimal() +
+  theme(
+    axis.text.y = element_text(size = 20,angle = 0, hjust = 0),
+    axis.text.x = element_text(size = 18),
+    axis.ticks.y = element_line(size = 0.5),
+    axis.title.y = element_text(size = 16),
+    axis.title=element_text(size=16,face="bold"),
+    legend.position = "none", 
+    plot.title = element_text(size = 24, hjust = 0.5))
+p1
+#nam1=paste("/Users/xiaoqixie/Desktop/Mountain Pine Beetle/Chapter 2/QQ_zip_endemic_std")
+#nam1=paste(nam1,".pdf",sep="")
+#ggsave(nam1, plot = p1, device = "pdf", width = 12, height = 8)
