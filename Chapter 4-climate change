@@ -1,0 +1,2179 @@
+setwd("/Users/xiaoqixie/Desktop/Thesis")
+#prepare data
+load("Code/Chapter 4/data_area1.RData")
+data1=data[-which(data$mz==0&data$Infestations==0),]
+#save(data,file="chapter 4/data_area1.RData")
+#remove age squared, height, last year infestations within 0.75, 1.25, and 4
+data2=data1[,-c(1:7,9:11,13:15,21,23)]
+data_o=data2[which(data1$year<2015),]
+data_d=data2[which(data1$year>2014),]
+x_o=scale(data_o,center=T,scale=T)
+x_d=scale(data_d,center=T,scale=T)
+y_o=data1$Infestations[which(data1$year<2015)]
+y_d=data1$Infestations[which(data1$year>2014)]
+library(pscl)
+outbreak=zeroinfl(y_o~.,data=data.frame(cbind(x_o,y_o)),dist="negbin")
+decline=zeroinfl(y_d~.,data=data.frame(cbind(x_d,y_d)),dist="negbin")
+
+##################################################################################
+conf_intervals1<- confint(outbreak)
+cf=round(c(outbreak$coefficients$count),3)
+ci_lower=round(conf_intervals1[1:10,1],3)
+ci_upper=round(conf_intervals1[1:10,2],3)
+CI1=data.frame(cbind(names(outbreak$coefficients$count),cf,ci_lower,ci_upper))
+colnames(CI1)=c("Name","cf","lower","upper")
+CI1=CI1[-1,]
+CI1$Name=c("Age","Pine Density","Relative Humidity","Wind Speed",
+           "Soil Moisture Index","Degree Days","Overwinter Survival Rate",
+           "Last Year Infestations","Dispersal Influence Within 4km")
+rownames(CI1)=NULL
+CI1$cf=as.numeric(CI1$cf)
+CI1$lower=as.numeric(CI1$lower)
+CI1$upper=as.numeric(CI1$upper)
+CI1$Name=as.factor(CI1$Name)
+
+CI1 <- CI1[order(-CI1$cf), ]
+CI1
+#CI1$Name <- factor(CI1$Name, levels=rev(levels(CI1$Name)))
+#climate, non-climate
+climate=CI1[c(2,5,7,9),]
+non_climate=CI1[-c(2,5,7,9),]
+rownames(climate)=NULL
+rownames(non_climate)=NULL
+order1=as.character(climate$Name)
+order2=as.character(non_climate$Name)
+climate$Name <- factor(climate$Name, levels = rev(order1))
+non_climate$Name <- factor(non_climate$Name, levels = rev(order2))
+p=ggplot(climate, aes(x=cf, y=Name)) +
+  geom_point(size=6) + # Points for cf values
+  geom_vline(xintercept = 0, linetype = "dashed", color = "black", linewidth = 1) +
+  geom_errorbarh(aes(xmin=lower, xmax=upper), height=1) + # Horizontal error bars for CIs
+  labs(title="Abundance Model",
+       x="Coefficient Value") +
+  theme_minimal() + 
+  theme(
+    axis.text.x = element_text(size=22),
+    #axis.text.y = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.ticks.y = element_blank(),
+    axis.text.y = element_text(size = 24) ,
+    plot.title = element_text(size = 24, hjust = 0.5)
+  )
+p
+nam1=paste("chapter 4/Abundance_outbreak_area1_climate")
+nam1=paste(nam1,".pdf",sep="")
+ggsave(nam1, plot = p, device = "pdf", width = 12, height = 8)
+
+
+p=ggplot(non_climate, aes(x=cf, y=Name)) +
+  geom_point(size=6) + # Points for cf values
+  geom_vline(xintercept = 0, linetype = "dashed", color = "black", linewidth = 1) +
+  geom_errorbarh(aes(xmin=lower, xmax=upper), height=1) + # Horizontal error bars for CIs
+  labs(title="Abundance Model",
+       x="Coefficient Value") +
+  theme_minimal() + 
+  theme(
+    axis.text.x = element_text(size=22),
+    #axis.text.y = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.ticks.y = element_blank(),
+    axis.text.y = element_text(size = 24) ,
+    plot.title = element_text(size = 24, hjust = 0.5)
+  )
+p
+nam1=paste("chapter 4/Abundance_outbreak_area1_non_climate")
+nam1=paste(nam1,".pdf",sep="")
+ggsave(nam1, plot = p, device = "pdf", width = 12, height = 8)
+
+cf1=round(c(outbreak$coefficients$zero),3)
+margin=round(conf_intervals1[11:20,2]-cf1,3)
+ci_lower=-cf1-margin
+ci_upper=-cf1+margin
+CI=data.frame(cbind(names(cf1),-cf1,ci_lower,ci_upper))
+colnames(CI)=c("Name","cf","lower","upper")
+CI=CI[-1,]
+CI$Name=c("Age","Pine Density","Relative Humidity","Wind Speed",
+          "Soil Moisture Index","Degree Days","Overwinter Survival Rate",
+          "Last Year Infestations","Dispersal Influence Within 4km")
+rownames(CI)=NULL
+CI$cf=as.numeric(CI$cf)
+CI$lower=as.numeric(CI$lower)
+CI$upper=as.numeric(CI$upper)
+CI$Name=as.factor(CI$Name)
+
+CI<- CI[order(-CI$cf), ]
+CI
+climate1=CI[c(3,5,7,9),]
+non_climate1=CI[-c(3,5,7,9),]
+
+climate2 <- (climate1[match(climate1$Name,order1), ])
+rownames(climate2)=NULL
+non_climate2=(non_climate1[match(non_climate1$Name,order2),])
+rownames(non_climate2)=NULL
+
+climate2$Name <- factor(climate2$Name, levels = rev(order1))
+non_climate2$Name <- factor(non_climate2$Name, levels = rev(order2))
+p1=ggplot(climate2, aes(x = cf, y = Name)) +
+  geom_point(size=6) + 
+  geom_errorbarh(aes(xmin=lower, xmax=upper), height=1) + 
+  geom_vline(xintercept = 0, linetype = "dashed", color = "black", linewidth = 1) +
+  labs(title="Presence Model",
+       x="Coefficient Value") +
+  theme_minimal() + 
+  theme(
+    axis.text.x = element_text(size=22),
+    #axis.text.y = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.ticks.y = element_blank(),
+    axis.text.y = element_text(size = 24) ,
+    plot.title = element_text(size = 24, hjust = 0.5)
+  )
+p1
+nam1=paste("chapter 4/PA_outbreak_area1_climate")
+nam1=paste(nam1,".pdf",sep="")
+ggsave(nam1, plot = p1, device = "pdf", width = 12, height = 8)
+
+
+p1=ggplot(non_climate2, aes(x=cf, y=Name)) +
+  geom_point(size=6) + 
+  geom_errorbarh(aes(xmin=lower, xmax=upper), height=1) + 
+  geom_vline(xintercept = 0, linetype = "dashed", color = "black", linewidth = 1) +
+  labs(title="Presence Model",
+       x="Coefficient Value") +
+  theme_minimal() + 
+  theme(
+    axis.text.x = element_text(size=22),
+    #axis.text.y = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.ticks.y = element_blank(),
+    axis.text.y = element_text(size = 24) ,
+    plot.title = element_text(size = 24, hjust = 0.5)
+  )
+p1
+nam1=paste("chapter 4/PA_outbreak_area1_non_climate")
+nam1=paste(nam1,".pdf",sep="")
+ggsave(nam1, plot = p1, device = "pdf", width = 12, height = 8)
+#################################################################################
+conf_intervals2<- confint(decline)
+cf=round(c(decline$coefficients$count),3)
+ci_lower=round(conf_intervals2[1:10,1],3)
+ci_upper=round(conf_intervals2[1:10,2],3)
+CI1=data.frame(cbind(names(decline$coefficients$count),cf,ci_lower,ci_upper))
+colnames(CI1)=c("Name","cf","lower","upper")
+CI1=CI1[-1,]
+CI1$Name=c("Age","Pine Density","Relative Humidity","Wind Speed",
+           "Soil Moisture Index","Degree Days","Overwinter Survival Rate",
+           "Last Year Infestations","Dispersal Influence Within 4km")
+
+CI1$cf=as.numeric(CI1$cf)
+CI1$lower=as.numeric(CI1$lower)
+CI1$upper=as.numeric(CI1$upper)
+CI1$Name=as.factor(CI1$Name)
+
+CI1 <- CI1[order(-CI1$cf), ]
+
+CI1$Name <- factor(CI1$Name, levels=rev(levels(CI1$Name)))
+#climate, non-climate
+climate=CI1[c(2,7,8,9),]
+non_climate=CI1[-c(2,7,8,9),]
+order1=climate$Name
+order2=non_climate$Name
+p=ggplot(climate, aes(x=cf, y=Name)) +
+  geom_point(size=6) + # Points for cf values
+  geom_vline(xintercept = 0, linetype = "dashed", color = "black", linewidth = 1) +
+  geom_errorbarh(aes(xmin=lower, xmax=upper), height=1) + # Horizontal error bars for CIs
+  labs(title="Abundance Model",
+       x="Coefficient Value") +
+  theme_minimal() + 
+  theme(
+    axis.text.x = element_text(size=22),
+    #axis.text.y = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.ticks.y = element_blank(),
+    axis.text.y = element_text(size = 24) ,
+    plot.title = element_text(size = 24, hjust = 0.5)
+  )
+p
+nam1=paste("chapter 4/Abundance_declining_area1_climate")
+nam1=paste(nam1,".pdf",sep="")
+ggsave(nam1, plot = p, device = "pdf", width = 12, height = 8)
+
+
+p=ggplot(non_climate, aes(x=cf, y=Name)) +
+  geom_point(size=6) + # Points for cf values
+  geom_vline(xintercept = 0, linetype = "dashed", color = "black", linewidth = 1) +
+  geom_errorbarh(aes(xmin=lower, xmax=upper), height=1) + # Horizontal error bars for CIs
+  labs(title="Abundance Model",
+       x="Coefficient Value") +
+  theme_minimal() + 
+  theme(
+    axis.text.x = element_text(size=22),
+    #axis.text.y = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.ticks.y = element_blank(),
+    axis.text.y = element_text(size = 24) ,
+    plot.title = element_text(size = 24, hjust = 0.5)
+  )
+p
+nam1=paste("chapter 4/Abundance_declining_area1_non_climate")
+nam1=paste(nam1,".pdf",sep="")
+ggsave(nam1, plot = p, device = "pdf", width = 12, height = 8)
+
+cf=round(c(decline$coefficients$zero),3)
+margin=round(conf_intervals2[11:20,2]-cf,3)
+ci_lower=-cf-margin
+ci_upper=-cf+margin
+CI=data.frame(cbind(names(cf),-cf,ci_lower,ci_upper))
+colnames(CI)=c("Name","cf","lower","upper")
+CI=CI[-1,]
+CI$Name=c("Age","Pine Density","Relative Humidity","Wind Speed",
+          "Soil Moisture Index","Degree Days","Overwinter Survival Rate",
+          "Last Year Infestations","Dispersal Influence Within 4km")
+
+CI$cf=as.numeric(CI$cf)
+CI$lower=as.numeric(CI$lower)
+CI$upper=as.numeric(CI$upper)
+CI$Name=as.factor(CI$Name)
+
+climate=CI[c(3,5,6,7),]
+non_climate=CI[-c(3,5,6,7),]
+climate <- climate[match(climate$Name,order1), ]
+non_climate=non_climate[match(non_climate$Name,order2),]
+climate$Name <- factor(climate$Name, levels = rev(order1))
+non_climate$Name <- factor(non_climate$Name, levels = rev(order2))
+
+p1=ggplot(climate, aes(x=cf, y=Name)) +
+  geom_point(size=6) + 
+  geom_errorbarh(aes(xmin=lower, xmax=upper), height=1) + 
+  geom_vline(xintercept = 0, linetype = "dashed", color = "black", linewidth = 1) +
+  labs(title="Presence Model",
+       x="Coefficient Value") +
+  theme_minimal() + 
+  theme(
+    axis.text.x = element_text(size=22),
+    #axis.text.y = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.ticks.y = element_blank(),
+    axis.text.y = element_text(size = 24) ,
+    plot.title = element_text(size = 24, hjust = 0.5)
+  )
+p1
+nam1=paste("chapter 4/PA_declining_area1_climate")
+nam1=paste(nam1,".pdf",sep="")
+ggsave(nam1, plot = p1, device = "pdf", width = 12, height = 8)
+
+
+p1=ggplot(non_climate, aes(x=cf, y=Name)) +
+  geom_point(size=6) + 
+  geom_errorbarh(aes(xmin=lower, xmax=upper), height=1) + 
+  geom_vline(xintercept = 0, linetype = "dashed", color = "black", linewidth = 1) +
+  labs(title="Presence Model",
+       x="Coefficient Value") +
+  theme_minimal() + 
+  theme(
+    axis.text.x = element_text(size=22),
+    #axis.text.y = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.ticks.y = element_blank(),
+    axis.text.y = element_text(size = 24) ,
+    plot.title = element_text(size = 24, hjust = 0.5)
+  )
+p1
+nam1=paste("chapter 4/PA_declining_area1_non_climate")
+nam1=paste(nam1,".pdf",sep="")
+ggsave(nam1, plot = p1, device = "pdf", width = 12, height = 8)
+
+###################################################################################
+#return the non-standardized coefficients
+f=function(beta0,coeff,data){
+  mu=apply(data,2,mean)
+  std=apply(data,2,sd)
+  intercept=beta0-sum(coeff*mu/std)
+  beta=coeff/std
+  return(c(intercept,beta))
+}
+#plot the mean prob of occurrence and number of infestations for two periods using historical data
+#outbreak
+cx=round(outbreak$coefficients$count,5)
+cx1=f(cx[1],cx[-1],data_o)
+cz=round(outbreak$coefficients$zero,5)
+cz1=f(cz[1],cz[-1],data_o)
+d_o=data%>%filter(year<2015)
+d_o=d_o[,-c(1:7,9:11,13:15,21,23)]
+x=z=as.matrix(cbind(1,d_o))
+library(LaplacesDemon)
+#
+load("Code/Chapter 4/Climate Change/data to fit.RData")
+data_big=data.frame(data)
+colnames(data_big)
+xy_big=data_big[,1:2]
+load("Code/Chapter 4/Regression Analysis/data to fit.RData")#small set pine density haven't been corrected
+data_small=data.frame(data)
+colnames(data_small)
+xy_small=unique(data_small[,1:2])
+position=which(xy_big[,1]>=min(xy_small[,1])&xy_big[,1]<=max(xy_small[,1])&xy_big[,2]>=min(xy_small[,2])&xy_big[,2]<=max(xy_small[,2]))
+
+data1=data_big[position,]
+id=rep(1:9810,14)
+year=as.numeric()
+for(i in 2007:2020){
+  year=c(year,replicate(9810,i))
+}
+data=data.frame(cbind(year,id,data1))
+colnames(data)
+library(data.table)
+xy2=data[1:9810,3:4]#data loaded in the first chunk
+load("Code/Chapter 4/Regression Analysis/data to fit.RData")
+data_small=data.frame(data)
+xy1=data_small[1:10000,1:2]
+id_xy1 <- paste(xy1$x, xy1$y, sep="-")
+id_xy2 <- paste(xy2$x, xy2$y, sep="-")
+# Find the matching row numbers
+matching_rows <- match(id_xy2, id_xy1)
+ct=fread("Code/Chapter 4/RCP data/RCP2.6/ct45_2100.csv")
+ct45=ct$`mean(Psurv)`[matching_rows]
+
+smi=fread("Code/Chapter 4/RCP data/RCP2.6/smi45_2100.csv")
+smi45=smi$`mean(SMImean)`[matching_rows]
+
+rh=fread("Code/Chapter 4/RCP data/RCP2.6/rh45_2100.csv")
+rh45=rh$`mean(\`Relative Humidity\`)`[matching_rows]
+
+tmins=fread("Code/Chapter 4/RCP data/RCP2.6/tmins45_2100.csv")
+tmins45=tmins$x[matching_rows]
+
+dd=fread("Code/Chapter 4/RCP data/RCP2.6/dd45_2100.csv")
+dd45=dd$V2[matching_rows]
+
+ct=fread("Code/Chapter 4/RCP data/RCP2.6/ct26_2100.csv")
+ct26=ct$`mean(Psurv)`[matching_rows]
+
+smi=fread("Code/Chapter 4/RCP data/RCP2.6/smi26_2100.csv")
+smi26=smi$`mean(SMImean)`[matching_rows]
+
+rh=fread("Code/Chapter 4/RCP data/RCP2.6/rh26_2100.csv")
+rh26=rh$`mean(\`Relative Humidity\`)`[matching_rows]
+
+tmins=fread("Code/Chapter 4/RCP data/RCP2.6/tmins26_2100.csv")
+tmins26=tmins$x[matching_rows]
+
+dd=fread("Code/Chapter 4/RCP data/RCP2.6/dd26_2100.csv")
+dd26=dd$V2[matching_rows]
+
+ct=fread("Code/Chapter 4/RCP data/RCP2.6/ct85_2100.csv")
+ct85=ct$`mean(Psurv)`[matching_rows]
+
+smi=fread("Code/Chapter 4/RCP data/RCP2.6/smi85_2100.csv")
+smi85=smi$`mean(SMImean)`[matching_rows]
+
+rh=fread("Code/Chapter 4/RCP data/RCP2.6/rh85_2100.csv")
+rh85=rh$`mean(\`Relative Humidity\`)`[matching_rows]
+
+tmins=fread("Code/Chapter 4/RCP data/RCP2.6/tmins85_2100.csv")
+tmins85=tmins$x[matching_rows]
+
+dd=fread("Code/Chapter 4/RCP data/RCP2.6/dd85_2100.csv")
+dd85=dd$V2[matching_rows]
+
+b=data.frame(ct26,ct45,ct85)
+################################
+#get the median for each cell for non-climate covariates
+#for outbreak
+id=rep(1:9810,8)
+d_o1=cbind(id,d_o)
+data_rcp_outbreak=as.numeric()
+for(i in unique(d_o1$id)){
+  d2=d_o1[which(d_o1$id==i),-1]
+  med=apply(d2,2,median)
+  data_rcp_outbreak=rbind(data_rcp_outbreak,c(i,med))
+}
+dim(data_rcp_outbreak)
+data_rcp_outbreak=data.frame(data_rcp_outbreak)
+data_rcp_outbreak$last.year.infestation.within.cell=3
+data_rcp_outbreak$dispersal=0.05
+
+mu1=exp(as.matrix(cbind(1,data_rcp_outbreak[,-1]))%*% cx1)
+etaz <- as.vector(as.matrix(cbind(1,data_rcp_outbreak[,-1]))%*% cz1)
+pi1<-1-round(invlogit(etaz),5)
+
+data_rcp_outbreak_rh26=data.frame(data_rcp_outbreak)
+data_rcp_outbreak_rh26$relativeHumidity=rh26
+
+data_rcp_outbreak_rh45=data.frame(data_rcp_outbreak)
+data_rcp_outbreak_rh45$relativeHumidity=rh45
+
+data_rcp_outbreak_rh85=data.frame(data_rcp_outbreak)
+data_rcp_outbreak_rh85$relativeHumidity=rh85
+
+data_rcp_outbreak_smi26=data.frame(data_rcp_outbreak)
+data_rcp_outbreak_smi26$SMI=smi26
+
+data_rcp_outbreak_smi45=data.frame(data_rcp_outbreak)
+data_rcp_outbreak_smi45$SMI=smi45
+
+data_rcp_outbreak_smi85=data.frame(data_rcp_outbreak)
+data_rcp_outbreak_smi85$SMI=smi85
+
+data_rcp_outbreak_dd26=data.frame(data_rcp_outbreak)
+data_rcp_outbreak_dd26$degreeDays=dd26
+
+data_rcp_outbreak_dd45=data.frame(data_rcp_outbreak)
+data_rcp_outbreak_dd45$degreeDays=dd45
+
+data_rcp_outbreak_dd85=data.frame(data_rcp_outbreak)
+data_rcp_outbreak_dd85$degreeDays=dd85
+
+data_rcp_outbreak_ct26=data.frame(data_rcp_outbreak)
+data_rcp_outbreak_ct26$coldTolerance=ct26
+
+data_rcp_outbreak_ct45=data.frame(data_rcp_outbreak)
+data_rcp_outbreak_ct45$coldTolerance=ct45
+
+data_rcp_outbreak_ct85=data.frame(data_rcp_outbreak)
+data_rcp_outbreak_ct85$coldTolerance=ct85
+
+#change all four covariates
+data_rcp_outbreak_all26=data.frame(data_rcp_outbreak)
+data_rcp_outbreak_all26[,c(4,6,7,8)]=cbind(rh26,smi26,dd26,ct26)
+
+data_rcp_outbreak_all45=data.frame(data_rcp_outbreak)
+data_rcp_outbreak_all45[,c(4,6,7,8)]=cbind(rh45,smi45,dd45,ct45)
+
+data_rcp_outbreak_all85=data.frame(data_rcp_outbreak)
+data_rcp_outbreak_all85[,c(4,6,7,8)]=cbind(rh85,smi85,dd85,ct85)
+#
+#
+#mean and probability of occurrence
+etaz<- as.vector(as.matrix(cbind(1,data_rcp_outbreak_ct26[,-1]))%*% cz1)
+pi_ct26_outbreak<-1-round(invlogit(etaz),5)
+mu_ct26_outbreak=exp(as.matrix(cbind(1,data_rcp_outbreak_ct26[,-1]))%*% cx1)
+
+etaz<- as.vector(as.matrix(cbind(1,data_rcp_outbreak_ct45[,-1]))%*% cz1)
+pi_ct45_outbreak<-1-round(invlogit(etaz),5)
+mu_ct45_outbreak=exp(as.matrix(cbind(1,data_rcp_outbreak_ct45[,-1]))%*% cx1)
+
+etaz<- as.vector(as.matrix(cbind(1,data_rcp_outbreak_ct85[,-1]))%*% cz1)
+pi_ct85_outbreak<-1-round(invlogit(etaz),5)
+mu_ct85_outbreak=exp(as.matrix(cbind(1,data_rcp_outbreak_ct85[,-1]))%*% cx1)
+
+etaz<- as.vector(as.matrix(cbind(1,data_rcp_outbreak_dd26[,-1]))%*% cz1)
+pi_dd26_outbreak<-1-round(invlogit(etaz),5)
+mu_dd26_outbreak=exp(as.matrix(cbind(1,data_rcp_outbreak_dd26[,-1]))%*% cx1)
+
+etaz<- as.vector(as.matrix(cbind(1,data_rcp_outbreak_dd45[,-1]))%*% cz1)
+pi_dd45_outbreak<-1-round(invlogit(etaz),5)
+mu_dd45_outbreak=exp(as.matrix(cbind(1,data_rcp_outbreak_dd45[,-1]))%*% cx1)
+
+etaz<- as.vector(as.matrix(cbind(1,data_rcp_outbreak_dd85[,-1]))%*% cz1)
+pi_dd85_outbreak<-1-round(invlogit(etaz),5)
+mu_dd85_outbreak=exp(as.matrix(cbind(1,data_rcp_outbreak_dd85[,-1]))%*% cx1)
+
+etaz<- as.vector(as.matrix(cbind(1,data_rcp_outbreak_rh26[,-1]))%*% cz1)
+pi_rh26_outbreak<-1-round(invlogit(etaz),5)
+mu_rh26_outbreak=exp(as.matrix(cbind(1,data_rcp_outbreak_rh26[,-1]))%*% cx1)
+
+etaz<- as.vector(as.matrix(cbind(1,data_rcp_outbreak_rh45[,-1]))%*% cz1)
+pi_rh45_outbreak<-1-round(invlogit(etaz),5)
+mu_rh45_outbreak=exp(as.matrix(cbind(1,data_rcp_outbreak_rh45[,-1]))%*% cx1)
+
+etaz<- as.vector(as.matrix(cbind(1,data_rcp_outbreak_rh85[,-1]))%*% cz1)
+pi_rh85_outbreak<-1-round(invlogit(etaz),5)
+mu_rh85_outbreak=exp(as.matrix(cbind(1,data_rcp_outbreak_rh85[,-1]))%*% cx1)
+
+etaz<- as.vector(as.matrix(cbind(1,data_rcp_outbreak_smi26[,-1]))%*% cz1)
+pi_smi26_outbreak<-1-round(invlogit(etaz),5)
+mu_smi26_outbreak=exp(as.matrix(cbind(1,data_rcp_outbreak_smi26[,-1]))%*% cx1)
+
+etaz<- as.vector(as.matrix(cbind(1,data_rcp_outbreak_smi45[,-1]))%*% cz1)
+pi_smi45_outbreak<-1-round(invlogit(etaz),5)
+mu_smi45_outbreak=exp(as.matrix(cbind(1,data_rcp_outbreak_smi45[,-1]))%*% cx1)
+
+etaz<- as.vector(as.matrix(cbind(1,data_rcp_outbreak_smi85[,-1]))%*% cz1)
+pi_smi85_outbreak<-1-round(invlogit(etaz),5)
+mu_smi85_outbreak=exp(as.matrix(cbind(1,data_rcp_outbreak_smi85[,-1]))%*% cx1)
+
+etaz<- as.vector(as.matrix(cbind(1,data_rcp_outbreak_all26[,-1]))%*% cz1)
+pi_all26_outbreak<-1-round(invlogit(etaz),5)
+mu_all26_outbreak=exp(as.matrix(cbind(1,data_rcp_outbreak_all26[,-1]))%*% cx1)
+
+etaz<- as.vector(as.matrix(cbind(1,data_rcp_outbreak_all45[,-1]))%*% cz1)
+pi_all45_outbreak<-1-round(invlogit(etaz),5)
+mu_all45_outbreak=exp(as.matrix(cbind(1,data_rcp_outbreak_all45[,-1]))%*% cx1)
+
+etaz<- as.vector(as.matrix(cbind(1,data_rcp_outbreak_all85[,-1]))%*% cz1)
+pi_all85_outbreak<-1-round(invlogit(etaz),5)
+mu_all85_outbreak=exp(as.matrix(cbind(1,data_rcp_outbreak_all85[,-1]))%*% cx1)
+#
+#
+#plot the outbreak in log scale
+#abundance
+maximum=max(log(mu1),log(mu_ct26_outbreak),log(mu_ct45_outbreak),log(mu_ct85_outbreak),
+            log(mu_dd26_outbreak),log(mu_dd45_outbreak),log(mu_dd85_outbreak),
+            log(mu_smi26_outbreak),log(mu_smi45_outbreak),log(mu_smi85_outbreak),
+            log(mu_rh26_outbreak),log(mu_rh45_outbreak),log(mu_rh85_outbreak),
+            log(mu_all26_outbreak),log(mu_all45_outbreak),log(mu_all85_outbreak))
+
+minimum=min(log(mu1),log(mu_ct26_outbreak),log(mu_ct45_outbreak),log(mu_ct85_outbreak),
+            log(mu_dd26_outbreak),log(mu_dd45_outbreak),log(mu_dd85_outbreak),
+            log(mu_smi26_outbreak),log(mu_smi45_outbreak),log(mu_smi85_outbreak),
+            log(mu_rh26_outbreak),log(mu_rh45_outbreak),log(mu_rh85_outbreak),
+            log(mu_all26_outbreak),log(mu_all45_outbreak),log(mu_all85_outbreak))
+
+#
+#
+load("Code/Chapter 4/data_area1.RData")
+xy=unique(data[,2:3])
+d1=cbind(xy,mu1)
+colnames(d1)=c("x","y","Expected Number Of Infestations")
+#log scale the expected number of infestations for a better vision
+d2=d1
+d2$`Expected Number Of Infestations`=log(d2$`Expected Number Of Infestations`)
+#d2$`Expected Number Of Infestations`=log(d2$`Expected Number Of Infestations`)
+p=ggplot(data=d2,aes(x,y,fill=`Expected Number Of Infestations`))+
+  geom_raster()+
+  scale_fill_viridis(option="magma",limit=c(minimum,maximum))+
+  coord_fixed(ratio = 1)+
+  theme_void() + 
+  theme(
+    axis.text.x = element_blank(),
+    axis.text.y = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.ticks.y = element_blank(),
+    legend.key.height = unit(0.13, "npc"),
+    legend.title = element_blank(),
+    legend.text = element_text(size = 24)
+  )
+p
+nam1=paste("chapter 4/Abundance_area1_outbreak_mean(log)")
+nam1=paste(nam1,".pdf",sep="")
+ggsave(nam1, plot = p, device = "pdf", width = 4, height = 4)
+
+
+d1=cbind(xy,pi1)
+colnames(d1)=c("x","y","Probability Of Ocurrence")
+p=ggplot(data=d1,aes(x,y,fill=`Probability Of Ocurrence`))+
+  geom_raster()+
+  scale_fill_viridis(option="magma",limit=c(0,1))+
+  coord_fixed(ratio = 1)+
+  theme_void() + 
+  theme(
+    axis.text.x = element_blank(),
+    axis.text.y = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.ticks.y = element_blank(),
+    legend.key.height = unit(0.13, "npc"),
+    legend.title = element_blank(),
+    legend.text = element_text(size = 24)
+  )
+p
+nam1=paste("chapter 4/PA_area1_outbreak_prob")
+nam1=paste(nam1,".pdf",sep="")
+ggsave(nam1, plot = p, device = "pdf", width = 4, height = 4)
+#
+#under climate change
+#decrease as temp goes up
+d1=cbind(xy,log(mu_ct26_outbreak))
+colnames(d1)=c("x","y","Expected Number Of Infestations")
+p=ggplot(data=d1,aes(x,y,fill=`Expected Number Of Infestations`))+
+  geom_raster()+
+  scale_fill_viridis(option="magma",limit=c(minimum,maximum))+
+  coord_fixed(ratio = 1)+
+  theme_void() + 
+  theme(
+    axis.text.x = element_blank(),
+    axis.text.y = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.ticks.y = element_blank(),
+    legend.key.height = unit(0.13, "npc"),
+    legend.title = element_blank(),
+    legend.text = element_text(size = 24)
+  )
+p
+nam1=paste("chapter 4/Abundance_area1_outbreak_ct26_mean(log)")
+nam1=paste(nam1,".pdf",sep="")
+ggsave(nam1, plot = p, device = "pdf", width = 4, height = 4)
+
+#decrease as temp goes up
+d1=cbind(xy,pi_ct26_outbreak)
+colnames(d1)=c("x","y","Probability Of Ocurrence")
+p=ggplot(data=d1,aes(x,y,fill=`Probability Of Ocurrence`))+
+  geom_raster()+
+  scale_fill_viridis(option="magma",limit=c(0,1))+
+  coord_fixed(ratio = 1)+
+  theme_void() + 
+  theme(
+    axis.text.x = element_blank(),
+    axis.text.y = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.ticks.y = element_blank(),
+    legend.key.height = unit(0.13, "npc"),
+    legend.title = element_blank(),
+    legend.text = element_text(size = 24)
+  )
+p
+nam1=paste("chapter 4/PA_area1_outbreak_ct26_prob")
+nam1=paste(nam1,".pdf",sep="")
+ggsave(nam1, plot = p, device = "pdf", width = 4, height = 4)
+
+d1=cbind(xy,log(mu_ct45_outbreak))
+colnames(d1)=c("x","y","Expected Number Of Infestations")
+p=ggplot(data=d1,aes(x,y,fill=`Expected Number Of Infestations`))+
+  geom_raster()+
+  scale_fill_viridis(option="magma",limit=c(minimum,maximum))+
+  coord_fixed(ratio = 1)+
+  theme_void() + 
+  theme(
+    axis.text.x = element_blank(),
+    axis.text.y = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.ticks.y = element_blank(),
+    legend.key.height = unit(0.13, "npc"),
+    legend.title = element_blank(),
+    legend.text = element_text(size = 24)
+  )
+p
+nam1=paste("chapter 4/Abundance_area1_outbreak_ct45_mean(log)")
+nam1=paste(nam1,".pdf",sep="")
+ggsave(nam1, plot = p, device = "pdf", width = 4, height = 4)
+
+d1=cbind(xy,pi_ct45_outbreak)
+colnames(d1)=c("x","y","Probability Of Ocurrence")
+p=ggplot(data=d1,aes(x,y,fill=`Probability Of Ocurrence`))+
+  geom_raster()+
+  scale_fill_viridis(option="magma",limit=c(0,1))+
+  coord_fixed(ratio = 1)+
+  theme_void() + 
+  theme(
+    axis.text.x = element_blank(),
+    axis.text.y = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.ticks.y = element_blank(),
+    legend.key.height = unit(0.13, "npc"),
+    legend.title = element_blank(),
+    legend.text = element_text(size = 24)
+  )
+p
+nam1=paste("chapter 4/PA_area1_outbreak_ct45_prob")
+nam1=paste(nam1,".pdf",sep="")
+ggsave(nam1, plot = p, device = "pdf", width = 4, height = 4)
+
+d1=cbind(xy,log(mu_ct85_outbreak))
+colnames(d1)=c("x","y","Expected Number Of Infestations")
+p=ggplot(data=d1,aes(x,y,fill=`Expected Number Of Infestations`))+
+  geom_raster()+
+  scale_fill_viridis(option="magma",limit=c(minimum,maximum))+
+  coord_fixed(ratio = 1)+
+  theme_void() + 
+  theme(
+    axis.text.x = element_blank(),
+    axis.text.y = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.ticks.y = element_blank(),
+    legend.key.height = unit(0.13, "npc"),
+    legend.title = element_blank(),
+    legend.text = element_text(size = 24)
+  )
+p
+nam1=paste("chapter 4/Abundance_area1_outbreak_ct85_mean(log)")
+nam1=paste(nam1,".pdf",sep="")
+ggsave(nam1, plot = p, device = "pdf", width = 4, height = 4)
+
+d1=cbind(xy,pi_ct85_outbreak)
+colnames(d1)=c("x","y","Probability Of Ocurrence")
+p=ggplot(data=d1,aes(x,y,fill=`Probability Of Ocurrence`))+
+  geom_raster()+
+  scale_fill_viridis(option="magma",limit=c(0,1))+
+  coord_fixed(ratio = 1)+
+  theme_void() + 
+  theme(
+    axis.text.x = element_blank(),
+    axis.text.y = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.ticks.y = element_blank(),
+    legend.key.height = unit(0.13, "npc"),
+    legend.title = element_blank(),
+    legend.text = element_text(size = 24)
+  )
+p
+nam1=paste("chapter 4/PA_area1_outbreak_ct85_prob")
+nam1=paste(nam1,".pdf",sep="")
+ggsave(nam1, plot = p, device = "pdf", width = 4, height = 4)
+
+#decrease as temp goes up
+d1=cbind(xy,log(mu_rh26_outbreak))
+colnames(d1)=c("x","y","Expected Number Of Infestations")
+p=ggplot(data=d1,aes(x,y,fill=`Expected Number Of Infestations`))+
+  geom_raster()+
+  scale_fill_viridis(option="magma",limit=c(minimum,maximum))+
+  coord_fixed(ratio = 1)+
+  theme_void() + 
+  theme(
+    axis.text.x = element_blank(),
+    axis.text.y = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.ticks.y = element_blank(),
+    legend.key.height = unit(0.13, "npc"),
+    legend.title = element_blank(),
+    legend.text = element_text(size = 24)
+  )
+p
+nam1=paste("chapter 4/Abundance_area1_outbreak_rh26_mean(log)")
+nam1=paste(nam1,".pdf",sep="")
+ggsave(nam1, plot = p, device = "pdf", width = 4, height = 4)
+
+#decrease
+d1=cbind(xy,pi_rh26_outbreak)
+colnames(d1)=c("x","y","Probability Of Ocurrence")
+p=ggplot(data=d1,aes(x,y,fill=`Probability Of Ocurrence`))+
+  geom_raster()+
+  scale_fill_viridis(option="magma",limit=c(0,1))+
+  coord_fixed(ratio = 1)+
+  theme_void() + 
+  theme(
+    axis.text.x = element_blank(),
+    axis.text.y = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.ticks.y = element_blank(),
+    legend.key.height = unit(0.13, "npc"),
+    legend.title = element_blank(),
+    legend.text = element_text(size = 24)
+  )
+p
+nam1=paste("chapter 4/PA_area1_outbreak_rh26_prob")
+nam1=paste(nam1,".pdf",sep="")
+ggsave(nam1, plot = p, device = "pdf", width = 4, height = 4)
+
+d1=cbind(xy,log(mu_rh45_outbreak))
+colnames(d1)=c("x","y","Expected Number Of Infestations")
+p=ggplot(data=d1,aes(x,y,fill=`Expected Number Of Infestations`))+
+  geom_raster()+
+  scale_fill_viridis(option="magma",limit=c(minimum,maximum))+
+  coord_fixed(ratio = 1)+
+  theme_void() + 
+  theme(
+    axis.text.x = element_blank(),
+    axis.text.y = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.ticks.y = element_blank(),
+    legend.key.height = unit(0.13, "npc"),
+    legend.title = element_blank(),
+    legend.text = element_text(size = 24)
+  )
+p
+nam1=paste("chapter 4/Abundance_area1_outbreak_rh45_mean(log)")
+nam1=paste(nam1,".pdf",sep="")
+ggsave(nam1, plot = p, device = "pdf", width = 4, height = 4)
+
+d1=cbind(xy,pi_rh45_outbreak)
+colnames(d1)=c("x","y","Probability Of Ocurrence")
+p=ggplot(data=d1,aes(x,y,fill=`Probability Of Ocurrence`))+
+  geom_raster()+
+  scale_fill_viridis(option="magma",limit=c(0,1))+
+  coord_fixed(ratio = 1)+
+  theme_void() + 
+  theme(
+    axis.text.x = element_blank(),
+    axis.text.y = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.ticks.y = element_blank(),
+    legend.key.height = unit(0.13, "npc"),
+    legend.title = element_blank(),
+    legend.text = element_text(size = 24)
+  )
+p
+nam1=paste("chapter 4/PA_area1_outbreak_rh45_prob")
+nam1=paste(nam1,".pdf",sep="")
+ggsave(nam1, plot = p, device = "pdf", width = 4, height = 4)
+
+d1=cbind(xy,log(mu_rh85_outbreak))
+colnames(d1)=c("x","y","Expected Number Of Infestations")
+p=ggplot(data=d1,aes(x,y,fill=`Expected Number Of Infestations`))+
+  geom_raster()+
+  scale_fill_viridis(option="magma",limit=c(minimum,maximum))+
+  coord_fixed(ratio = 1)+
+  theme_void() + 
+  theme(
+    axis.text.x = element_blank(),
+    axis.text.y = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.ticks.y = element_blank(),
+    legend.key.height = unit(0.13, "npc"),
+    legend.title = element_blank(),
+    legend.text = element_text(size = 24)
+  )
+p
+nam1=paste("chapter 4/Abundance_area1_outbreak_rh85_mean(log)")
+nam1=paste(nam1,".pdf",sep="")
+ggsave(nam1, plot = p, device = "pdf", width = 4, height = 4)
+
+d1=cbind(xy,pi_rh85_outbreak)
+colnames(d1)=c("x","y","Probability Of Ocurrence")
+p=ggplot(data=d1,aes(x,y,fill=`Probability Of Ocurrence`))+
+  geom_raster()+
+  scale_fill_viridis(option="magma",limit=c(0,1))+
+  coord_fixed(ratio = 1)+
+  theme_void() + 
+  theme(
+    axis.text.x = element_blank(),
+    axis.text.y = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.ticks.y = element_blank(),
+    legend.key.height = unit(0.13, "npc"),
+    legend.title = element_blank(),
+    legend.text = element_text(size = 24)
+  )
+p
+nam1=paste("chapter 4/PA_area1_outbreak_rh85_prob")
+nam1=paste(nam1,".pdf",sep="")
+ggsave(nam1, plot = p, device = "pdf", width = 4, height = 4)
+
+#slightly decrease the number of infestations as the rcp goes up
+d1=cbind(xy,log(mu_smi26_outbreak))
+colnames(d1)=c("x","y","Expected Number Of Infestations")
+p=ggplot(data=d1,aes(x,y,fill=`Expected Number Of Infestations`))+
+  geom_raster()+
+  scale_fill_viridis(option="magma",limit=c(minimum,maximum))+
+  coord_fixed(ratio = 1)+
+  theme_void() + 
+  theme(
+    axis.text.x = element_blank(),
+    axis.text.y = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.ticks.y = element_blank(),
+    legend.key.height = unit(0.13, "npc"),
+    legend.title = element_blank(),
+    legend.text = element_text(size = 24)
+  )
+p
+nam1=paste("chapter 4/Abundance_area1_outbreak_smi26_mean(log)")
+nam1=paste(nam1,".pdf",sep="")
+ggsave(nam1, plot = p, device = "pdf", width = 4, height = 4)
+
+#increase as temp goes up
+d1=cbind(xy,pi_smi26_outbreak)
+colnames(d1)=c("x","y","Probability Of Ocurrence")
+p=ggplot(data=d1,aes(x,y,fill=`Probability Of Ocurrence`))+
+  geom_raster()+
+  scale_fill_viridis(option="magma",limit=c(0,1))+
+  coord_fixed(ratio = 1)+
+  theme_void() + 
+  theme(
+    axis.text.x = element_blank(),
+    axis.text.y = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.ticks.y = element_blank(),
+    legend.key.height = unit(0.13, "npc"),
+    legend.title = element_blank(),
+    legend.text = element_text(size = 24)
+  )
+p
+nam1=paste("chapter 4/PA_area1_outbreak_smi26_prob")
+nam1=paste(nam1,".pdf",sep="")
+ggsave(nam1, plot = p, device = "pdf", width = 4, height = 4)
+
+d1=cbind(xy,log(mu_smi45_outbreak))
+colnames(d1)=c("x","y","Expected Number Of Infestations")
+p=ggplot(data=d1,aes(x,y,fill=`Expected Number Of Infestations`))+
+  geom_raster()+
+  scale_fill_viridis(option="magma",limit=c(minimum,maximum))+
+  coord_fixed(ratio = 1)+
+  theme_void() + 
+  theme(
+    axis.text.x = element_blank(),
+    axis.text.y = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.ticks.y = element_blank(),
+    legend.key.height = unit(0.13, "npc"),
+    legend.title = element_blank(),
+    legend.text = element_text(size = 24)
+  )
+p
+nam1=paste("chapter 4/Abundance_area1_outbreak_smi45_mean")
+nam1=paste(nam1,".pdf",sep="")
+ggsave(nam1, plot = p, device = "pdf", width = 4, height = 4)
+
+d1=cbind(xy,pi_smi45_outbreak)
+colnames(d1)=c("x","y","Probability Of Ocurrence")
+p=ggplot(data=d1,aes(x,y,fill=`Probability Of Ocurrence`))+
+  geom_raster()+
+  scale_fill_viridis(option="magma",limit=c(0,1))+
+  coord_fixed(ratio = 1)+
+  theme_void() + 
+  theme(
+    axis.text.x = element_blank(),
+    axis.text.y = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.ticks.y = element_blank(),
+    legend.key.height = unit(0.13, "npc"),
+    legend.title = element_blank(),
+    legend.text = element_text(size = 24)
+  )
+p
+nam1=paste("chapter 4/PA_area1_outbreak_smi45_prob")
+nam1=paste(nam1,".pdf",sep="")
+ggsave(nam1, plot = p, device = "pdf", width = 4, height = 4)
+
+d1=cbind(xy,log(mu_smi85_outbreak))
+colnames(d1)=c("x","y","Expected Number Of Infestations")
+p=ggplot(data=d1,aes(x,y,fill=`Expected Number Of Infestations`))+
+  geom_raster()+
+  scale_fill_viridis(option="magma",limit=c(minimum,maximum))+
+  coord_fixed(ratio = 1)+
+  theme_void() + 
+  theme(
+    axis.text.x = element_blank(),
+    axis.text.y = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.ticks.y = element_blank(),
+    legend.key.height = unit(0.13, "npc"),
+    legend.title = element_blank(),
+    legend.text = element_text(size = 24)
+  )
+p
+nam1=paste("chapter 4/Abundance_area1_outbreak_smi85_mean(log)")
+nam1=paste(nam1,".pdf",sep="")
+ggsave(nam1, plot = p, device = "pdf", width = 4, height = 4)
+
+d1=cbind(xy,pi_smi85_outbreak)
+colnames(d1)=c("x","y","Probability Of Ocurrence")
+p=ggplot(data=d1,aes(x,y,fill=`Probability Of Ocurrence`))+
+  geom_raster()+
+  scale_fill_viridis(option="magma",limit=c(0,1))+
+  coord_fixed(ratio = 1)+
+  theme_void() + 
+  theme(
+    axis.text.x = element_blank(),
+    axis.text.y = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.ticks.y = element_blank(),
+    legend.key.height = unit(0.13, "npc"),
+    legend.title = element_blank(),
+    legend.text = element_text(size = 24)
+  )
+p
+nam1=paste("chapter 4/PA_area1_outbreak_smi85_prob")
+nam1=paste(nam1,".pdf",sep="")
+ggsave(nam1, plot = p, device = "pdf", width = 4, height = 4)
+
+d1=cbind(xy,log(mu_dd26_outbreak))
+colnames(d1)=c("x","y","Expected Number Of Infestations")
+p=ggplot(data=d1,aes(x,y,fill=`Expected Number Of Infestations`))+
+  geom_raster()+
+  scale_fill_viridis(option="magma",limit=c(minimum,maximum))+
+  coord_fixed(ratio = 1)+
+  theme_void() + 
+  theme(
+    axis.text.x = element_blank(),
+    axis.text.y = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.ticks.y = element_blank(),
+    legend.key.height = unit(0.13, "npc"),
+    legend.title = element_blank(),
+    legend.text = element_text(size = 24)
+  )
+p
+nam1=paste("chapter 4/Abundance_area1_outbreak_dd26_mean(log)")
+nam1=paste(nam1,".pdf",sep="")
+ggsave(nam1, plot = p, device = "pdf", width = 4, height = 4)
+
+d1=cbind(xy,pi_dd26_outbreak)
+colnames(d1)=c("x","y","Probability Of Ocurrence")
+p=ggplot(data=d1,aes(x,y,fill=`Probability Of Ocurrence`))+
+  geom_raster()+
+  scale_fill_viridis(option="magma",limit=c(0,1))+
+  coord_fixed(ratio = 1)+
+  theme_void() + 
+  theme(
+    axis.text.x = element_blank(),
+    axis.text.y = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.ticks.y = element_blank(),
+    legend.key.height = unit(0.13, "npc"),
+    legend.title = element_blank(),
+    legend.text = element_text(size = 24)
+  )
+p
+nam1=paste("chapter 4/PA_area1_outbreak_dd26_prob")
+nam1=paste(nam1,".pdf",sep="")
+ggsave(nam1, plot = p, device = "pdf", width = 4, height = 4)
+
+d1=cbind(xy,log(mu_dd45_outbreak))
+colnames(d1)=c("x","y","Expected Number Of Infestations")
+p=ggplot(data=d1,aes(x,y,fill=`Expected Number Of Infestations`))+
+  geom_raster()+
+  scale_fill_viridis(option="magma",limit=c(minimum,maximum))+
+  coord_fixed(ratio = 1)+
+  theme_void() + 
+  theme(
+    axis.text.x = element_blank(),
+    axis.text.y = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.ticks.y = element_blank(),
+    legend.key.height = unit(0.13, "npc"),
+    legend.title = element_blank(),
+    legend.text = element_text(size = 24)
+  )
+p
+nam1=paste("chapter 4/Abundance_area1_outbreak_dd45_mean(log)")
+nam1=paste(nam1,".pdf",sep="")
+ggsave(nam1, plot = p, device = "pdf", width = 4, height = 4)
+
+d1=cbind(xy,pi_dd45_outbreak)
+colnames(d1)=c("x","y","Probability Of Ocurrence")
+p=ggplot(data=d1,aes(x,y,fill=`Probability Of Ocurrence`))+
+  geom_raster()+
+  scale_fill_viridis(option="magma",limit=c(0,1))+
+  coord_fixed(ratio = 1)+
+  theme_void() + 
+  theme(
+    axis.text.x = element_blank(),
+    axis.text.y = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.ticks.y = element_blank(),
+    legend.key.height = unit(0.13, "npc"),
+    legend.title = element_blank(),
+    legend.text = element_text(size = 24)
+  )
+p
+nam1=paste("chapter 4/PA_area1_outbreak_dd45_prob")
+nam1=paste(nam1,".pdf",sep="")
+ggsave(nam1, plot = p, device = "pdf", width = 4, height = 4)
+
+d1=cbind(xy,log(mu_dd85_outbreak))
+colnames(d1)=c("x","y","Expected Number Of Infestations")
+p=ggplot(data=d1,aes(x,y,fill=`Expected Number Of Infestations`))+
+  geom_raster()+
+  scale_fill_viridis(option="magma",limit=c(minimum,maximum))+
+  coord_fixed(ratio = 1)+
+  theme_void() + 
+  theme(
+    axis.text.x = element_blank(),
+    axis.text.y = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.ticks.y = element_blank(),
+    legend.key.height = unit(0.13, "npc"),
+    legend.title = element_blank(),
+    legend.text = element_text(size = 24)
+  )
+p
+nam1=paste("chapter 4/Abundance_area1_outbreak_dd85_mean(log)")
+nam1=paste(nam1,".pdf",sep="")
+ggsave(nam1, plot = p, device = "pdf", width = 4, height = 4)
+
+d1=cbind(xy,pi_dd85_outbreak)
+colnames(d1)=c("x","y","Probability Of Ocurrence")
+p=ggplot(data=d1,aes(x,y,fill=`Probability Of Ocurrence`))+
+  geom_raster()+
+  scale_fill_viridis(option="magma",limit=c(0,1))+
+  coord_fixed(ratio = 1)+
+  theme_void() + 
+  theme(
+    axis.text.x = element_blank(),
+    axis.text.y = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.ticks.y = element_blank(),
+    legend.key.height = unit(0.13, "npc"),
+    legend.title = element_blank(),
+    legend.text = element_text(size = 24)
+  )
+p
+nam1=paste("chapter 4/PA_area1_outbreak_dd85_prob")
+nam1=paste(nam1,".pdf",sep="")
+ggsave(nam1, plot = p, device = "pdf", width = 4, height = 4)
+
+d1=cbind(xy,log(mu_all26_outbreak))
+colnames(d1)=c("x","y","Expected Number Of Infestations")
+p=ggplot(data=d1,aes(x,y,fill=`Expected Number Of Infestations`))+
+  geom_raster()+
+  scale_fill_viridis(option="magma",limit=c(minimum,maximum))+
+  coord_fixed(ratio = 1)+
+  theme_void() + 
+  theme(
+    axis.text.x = element_blank(),
+    axis.text.y = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.ticks.y = element_blank(),
+    legend.key.height = unit(0.13, "npc"),
+    legend.title = element_blank(),
+    legend.text = element_text(size = 24)
+  )
+p
+nam1=paste("chapter 4/Abundance_area1_outbreak_all26_mean(log)")
+nam1=paste(nam1,".pdf",sep="")
+ggsave(nam1, plot = p, device = "pdf", width = 4, height = 4)
+
+d1=cbind(xy,pi_all26_outbreak)
+colnames(d1)=c("x","y","Probability Of Ocurrence")
+p=ggplot(data=d1,aes(x,y,fill=`Probability Of Ocurrence`))+
+  geom_raster()+
+  scale_fill_viridis(option="magma",limit=c(0,1))+
+  coord_fixed(ratio = 1)+
+  theme_void() + 
+  theme(
+    axis.text.x = element_blank(),
+    axis.text.y = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.ticks.y = element_blank(),
+    legend.key.height = unit(0.13, "npc"),
+    legend.title = element_blank(),
+    legend.text = element_text(size = 24)
+  )
+p
+nam1=paste("chapter 4/PA_area1_outbreak_all26_prob")
+nam1=paste(nam1,".pdf",sep="")
+ggsave(nam1, plot = p, device = "pdf", width = 4, height = 4)
+
+d1=cbind(xy,log(mu_all45_outbreak))
+colnames(d1)=c("x","y","Expected Number Of Infestations")
+p=ggplot(data=d1,aes(x,y,fill=`Expected Number Of Infestations`))+
+  geom_raster()+
+  scale_fill_viridis(option="magma",limit=c(minimum,maximum))+
+  coord_fixed(ratio = 1)+
+  theme_void() + 
+  theme(
+    axis.text.x = element_blank(),
+    axis.text.y = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.ticks.y = element_blank(),
+    legend.key.height = unit(0.13, "npc"),
+    legend.title = element_blank(),
+    legend.text = element_text(size = 24)
+  )
+p
+nam1=paste("chapter 4/Abundance_area1_outbreak_all45_mean(log)")
+nam1=paste(nam1,".pdf",sep="")
+ggsave(nam1, plot = p, device = "pdf", width = 4, height = 4)
+
+d1=cbind(xy,pi_all45_outbreak)
+colnames(d1)=c("x","y","Probability Of Ocurrence")
+p=ggplot(data=d1,aes(x,y,fill=`Probability Of Ocurrence`))+
+  geom_raster()+
+  scale_fill_viridis(option="magma",limit=c(0,1))+
+  coord_fixed(ratio = 1)+
+  theme_void() + 
+  theme(
+    axis.text.x = element_blank(),
+    axis.text.y = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.ticks.y = element_blank(),
+    legend.key.height = unit(0.13, "npc"),
+    legend.title = element_blank(),
+    legend.text = element_text(size = 24)
+  )
+p
+nam1=paste("chapter 4/PA_area1_outbreak_all45_prob")
+nam1=paste(nam1,".pdf",sep="")
+ggsave(nam1, plot = p, device = "pdf", width = 4, height = 4)
+
+d1=cbind(xy,log(mu_all85_outbreak))
+colnames(d1)=c("x","y","Expected Number Of Infestations")
+p=ggplot(data=d1,aes(x,y,fill=`Expected Number Of Infestations`))+
+  geom_raster()+
+  scale_fill_viridis(option="magma",limit=c(minimum,maximum))+
+  coord_fixed(ratio = 1)+
+  theme_void() + 
+  theme(
+    axis.text.x = element_blank(),
+    axis.text.y = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.ticks.y = element_blank(),
+    legend.key.height = unit(0.13, "npc"),
+    legend.title = element_blank(),
+    legend.text = element_text(size = 24)
+  )
+p
+nam1=paste("chapter 4/Abundance_area1_outbreak_all85_mean(log)")
+nam1=paste(nam1,".pdf",sep="")
+ggsave(nam1, plot = p, device = "pdf", width = 4, height = 4)
+
+d1=cbind(xy,pi_all85_outbreak)
+colnames(d1)=c("x","y","Probability Of Ocurrence")
+p=ggplot(data=d1,aes(x,y,fill=`Probability Of Ocurrence`))+
+  geom_raster()+
+  scale_fill_viridis(option="magma",limit=c(0,1))+
+  coord_fixed(ratio = 1)+
+  theme_void() + 
+  theme(
+    axis.text.x = element_blank(),
+    axis.text.y = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.ticks.y = element_blank(),
+    legend.key.height = unit(0.13, "npc"),
+    legend.title = element_blank(),
+    legend.text = element_text(size = 24)
+  )
+p
+nam1=paste("chapter 4/PA_area1_outbreak_all85_prob")
+nam1=paste(nam1,".pdf",sep="")
+ggsave(nam1, plot = p, device = "pdf", width = 4, height = 4)
+#######################################################################################
+#decliningcx=round(outbreak$coefficients$count,5)
+cx=round(decline$coefficients$zero,5)
+cx2=f(cx[1],cx[-1],data_d)
+cz=round(decline$coefficients$zero,5)
+cz2=f(cz[1],cz[-1],data_d)
+d_d=data%>%filter(year>2014)
+d_d=d_d[,-c(1:7,9:11,13:15,21,23)]
+x=z=as.matrix(cbind(1,d_d))
+library(LaplacesDemon)
+#expected number of infestations
+id=rep(1:9810,6)
+d_d1=cbind(id,d_d)
+data_rcp_decline=as.numeric()
+for(i in unique(d_d1$id)){
+  d2=d_d1[which(d_d1$id==i),-1]
+  med=apply(d2,2,median)
+  data_rcp_decline=rbind(data_rcp_decline,c(i,med))
+}
+dim(data_rcp_decline)
+data_rcp_decline=data.frame(data_rcp_decline)
+data_rcp_decline$last.year.infestation.within.cell=3
+data_rcp_decline$dispersal=0.05
+
+mu2=exp(as.matrix(cbind(1,data_rcp_decline[,-1]))%*% cx2)
+etaz <- as.vector(as.matrix(as.matrix(cbind(1,data_rcp_decline[,-1]))%*% cz2))
+pi2<-1-round(invlogit(etaz),5)
+
+data_rcp_decline_rh26=data.frame(data_rcp_decline)
+data_rcp_decline_rh26$relativeHumidity=rh26
+
+data_rcp_decline_rh45=data.frame(data_rcp_decline)
+data_rcp_decline_rh45$relativeHumidity=rh45
+
+data_rcp_decline_rh85=data.frame(data_rcp_decline)
+data_rcp_decline_rh85$relativeHumidity=rh85
+
+data_rcp_decline_smi26=data.frame(data_rcp_decline)
+data_rcp_decline_smi26$SMI=smi26
+
+data_rcp_decline_smi45=data.frame(data_rcp_decline)
+data_rcp_decline_smi45$SMI=smi45
+
+data_rcp_decline_smi85=data.frame(data_rcp_decline)
+data_rcp_decline_smi85$SMI=smi85
+
+data_rcp_decline_dd26=data.frame(data_rcp_decline)
+data_rcp_decline_dd26$degreeDays=dd26
+
+data_rcp_decline_dd45=data.frame(data_rcp_decline)
+data_rcp_decline_dd45$degreeDays=dd45
+
+data_rcp_decline_dd85=data.frame(data_rcp_decline)
+data_rcp_decline_dd85$degreeDays=dd85
+
+data_rcp_decline_ct26=data.frame(data_rcp_decline)
+data_rcp_decline_ct26$coldTolerance=ct26
+
+data_rcp_decline_ct45=data.frame(data_rcp_decline)
+data_rcp_decline_ct45$coldTolerance=ct45
+
+data_rcp_decline_ct85=data.frame(data_rcp_decline)
+data_rcp_decline_ct85$coldTolerance=ct85
+
+#change all four covariates
+data_rcp_decline_all26=data.frame(data_rcp_decline)
+data_rcp_decline_all26[,c(4,6,7,8)]=cbind(rh26,smi26,dd26,ct26)
+
+data_rcp_decline_all45=data.frame(data_rcp_decline)
+data_rcp_decline_all45[,c(4,6,7,8)]=cbind(rh45,smi45,dd45,ct45)
+
+data_rcp_decline_all85=data.frame(data_rcp_decline)
+data_rcp_decline_all85[,c(4,6,7,8)]=cbind(rh85,smi85,dd85,ct85)
+#
+#
+#mean and probability of occurrence
+etaz<- as.vector(as.matrix(cbind(1,data_rcp_decline_ct26[,-1]))%*% cz2)
+pi_ct26_decline<-1-round(invlogit(etaz),5)
+mu_ct26_decline=exp(as.matrix(cbind(1,data_rcp_decline_ct26[,-1]))%*% cx2)
+
+etaz<- as.vector(as.matrix(cbind(1,data_rcp_decline_ct45[,-1]))%*% cz2)
+pi_ct45_decline<-1-round(invlogit(etaz),5)
+mu_ct45_decline=exp(as.matrix(cbind(1,data_rcp_decline_ct45[,-1]))%*% cx2)
+
+etaz<- as.vector(as.matrix(cbind(1,data_rcp_decline_ct85[,-1]))%*% cz2)
+pi_ct85_decline<-1-round(invlogit(etaz),5)
+mu_ct85_decline=exp(as.matrix(cbind(1,data_rcp_decline_ct85[,-1]))%*% cx2)
+
+etaz<- as.vector(as.matrix(cbind(1,data_rcp_decline_dd26[,-1]))%*% cz2)
+pi_dd26_decline<-1-round(invlogit(etaz),5)
+mu_dd26_decline=exp(as.matrix(cbind(1,data_rcp_decline_dd26[,-1]))%*% cx2)
+
+etaz<- as.vector(as.matrix(cbind(1,data_rcp_decline_dd45[,-1]))%*% cz2)
+pi_dd45_decline<-1-round(invlogit(etaz),5)
+mu_dd45_decline=exp(as.matrix(cbind(1,data_rcp_decline_dd45[,-1]))%*% cx2)
+
+etaz<- as.vector(as.matrix(cbind(1,data_rcp_decline_dd85[,-1]))%*% cz2)
+pi_dd85_decline<-1-round(invlogit(etaz),5)
+mu_dd85_decline=exp(as.matrix(cbind(1,data_rcp_decline_dd85[,-1]))%*% cx2)
+
+etaz<- as.vector(as.matrix(cbind(1,data_rcp_decline_rh26[,-1]))%*% cz2)
+pi_rh26_decline<-1-round(invlogit(etaz),5)
+mu_rh26_decline=exp(as.matrix(cbind(1,data_rcp_decline_rh26[,-1]))%*% cx2)
+
+etaz<- as.vector(as.matrix(cbind(1,data_rcp_decline_rh45[,-1]))%*% cz2)
+pi_rh45_decline<-1-round(invlogit(etaz),5)
+mu_rh45_decline=exp(as.matrix(cbind(1,data_rcp_decline_rh45[,-1]))%*% cx2)
+
+etaz<- as.vector(as.matrix(cbind(1,data_rcp_decline_rh85[,-1]))%*% cz2)
+pi_rh85_decline<-1-round(invlogit(etaz),5)
+mu_rh85_decline=exp(as.matrix(cbind(1,data_rcp_decline_rh85[,-1]))%*% cx2)
+
+etaz<- as.vector(as.matrix(cbind(1,data_rcp_decline_smi26[,-1]))%*% cz2)
+pi_smi26_decline<-1-round(invlogit(etaz),5)
+mu_smi26_decline=exp(as.matrix(cbind(1,data_rcp_decline_smi26[,-1]))%*% cx2)
+
+etaz<- as.vector(as.matrix(cbind(1,data_rcp_decline_smi45[,-1]))%*% cz2)
+pi_smi45_decline<-1-round(invlogit(etaz),5)
+mu_smi45_decline=exp(as.matrix(cbind(1,data_rcp_decline_smi45[,-1]))%*% cx2)
+
+etaz<- as.vector(as.matrix(cbind(1,data_rcp_decline_smi85[,-1]))%*% cz2)
+pi_smi85_decline<-1-round(invlogit(etaz),5)
+mu_smi85_decline=exp(as.matrix(cbind(1,data_rcp_decline_smi85[,-1]))%*% cx2)
+
+etaz<- as.vector(as.matrix(cbind(1,data_rcp_decline_all26[,-1]))%*% cz2)
+pi_all26_decline<-1-round(invlogit(etaz),5)
+mu_all26_decline=exp(as.matrix(cbind(1,data_rcp_decline_all26[,-1]))%*% cx2)
+
+etaz<- as.vector(as.matrix(cbind(1,data_rcp_decline_all45[,-1]))%*% cz2)
+pi_all45_decline<-1-round(invlogit(etaz),5)
+mu_all45_decline=exp(as.matrix(cbind(1,data_rcp_decline_all45[,-1]))%*% cx2)
+
+etaz<- as.vector(as.matrix(cbind(1,data_rcp_decline_all85[,-1]))%*% cz2)
+pi_all85_decline<-1-round(invlogit(etaz),5)
+mu_all85_decline=exp(as.matrix(cbind(1,data_rcp_decline_all85[,-1]))%*% cx2)
+#non-log
+maximum=max(log(mu2),log(mu_ct26_decline),log(mu_ct45_decline),log(mu_ct85_decline),
+            log(mu_dd26_decline),log(mu_dd45_decline),log(mu_dd85_decline),
+            log(mu_smi26_decline),log(mu_smi45_decline),log(mu_smi85_decline),
+            log(mu_rh26_decline),log(mu_rh45_decline),log(mu_rh85_decline),
+            log(mu_all26_decline),log(mu_all45_decline),log(mu_all85_decline))
+
+minimum=min(log(mu2),log(mu_ct26_decline),log(mu_ct45_decline),log(mu_ct85_decline),
+            log(mu_dd26_decline),log(mu_dd45_decline),log(mu_dd85_decline),
+            log(mu_smi26_decline),log(mu_smi45_decline),log(mu_smi85_decline),
+            log(mu_rh26_decline),log(mu_rh45_decline),log(mu_rh85_decline),
+            log(mu_all26_decline),log(mu_all45_decline),log(mu_all85_decline))
+
+#
+#
+d1=cbind(xy,mu2)
+colnames(d1)=c("x","y","Expected Number Of Infestations")
+#log scale the expected number of infestations for a better vision
+d2=d1
+d2$`Expected Number Of Infestations`=log(d2$`Expected Number Of Infestations`)
+p=ggplot(data=d2,aes(x,y,fill=`Expected Number Of Infestations`))+
+  geom_raster()+
+  scale_fill_viridis(option="magma",limit=c(minimum,maximum))+
+  coord_fixed(ratio = 1)+
+  theme_void() + 
+  theme(
+    axis.text.x = element_blank(),
+    axis.text.y = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.ticks.y = element_blank(),
+    legend.key.height = unit(0.13, "npc"),
+    legend.title = element_blank(),
+    legend.text = element_text(size = 24)
+  )
+p
+nam1=paste("chapter 4/Abundance_area1_decline_mean(log)")
+nam1=paste(nam1,".pdf",sep="")
+ggsave(nam1, plot = p, device = "pdf", width = 4, height = 4)
+
+d1=cbind(xy,pi2)
+colnames(d1)=c("x","y","Probability Of Ocurrence")
+p=ggplot(data=d1,aes(x,y,fill=`Probability Of Ocurrence`))+
+  geom_raster()+
+  scale_fill_viridis(option="magma",limit=c(0,1))+
+  coord_fixed(ratio = 1)+
+  theme_void() + 
+  theme(
+    axis.text.x = element_blank(),
+    axis.text.y = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.ticks.y = element_blank(),
+    legend.key.height = unit(0.13, "npc"),
+    legend.title = element_blank(),
+    legend.text = element_text(size = 24)
+  )
+p
+nam1=paste("chapter 4/PA_area1_decline_prob")
+nam1=paste(nam1,".pdf",sep="")
+ggsave(nam1, plot = p, device = "pdf", width = 4, height = 4)
+#
+#under climate change
+d1=cbind(xy,log(mu_ct26_decline))
+colnames(d1)=c("x","y","Expected Number Of Infestations")
+p=ggplot(data=d1,aes(x,y,fill=`Expected Number Of Infestations`))+
+  geom_raster()+
+  scale_fill_viridis(option="magma",limit=c(minimum,maximum))+
+  coord_fixed(ratio = 1)+
+  theme_void() + 
+  theme(
+    axis.text.x = element_blank(),
+    axis.text.y = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.ticks.y = element_blank(),
+    legend.key.height = unit(0.13, "npc"),
+    legend.title = element_blank(),
+    legend.text = element_text(size = 24)
+  )
+p
+nam1=paste("chapter 4/Abundance_area1_decline_ct26_mean(log)")
+nam1=paste(nam1,".pdf",sep="")
+ggsave(nam1, plot = p, device = "pdf", width = 4, height = 4)
+
+#p increases 
+d1=cbind(xy,pi_ct26_decline)
+colnames(d1)=c("x","y","Probability Of Ocurrence")
+p=ggplot(data=d1,aes(x,y,fill=`Probability Of Ocurrence`))+
+  geom_raster()+
+  scale_fill_viridis(option="magma",limit=c(0,1))+
+  coord_fixed(ratio = 1)+
+  theme_void() + 
+  theme(
+    axis.text.x = element_blank(),
+    axis.text.y = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.ticks.y = element_blank(),
+    legend.key.height = unit(0.13, "npc"),
+    legend.title = element_blank(),
+    legend.text = element_text(size = 24)
+  )
+p
+nam1=paste("chapter 4/PA_area1_decline_ct26_prob")
+nam1=paste(nam1,".pdf",sep="")
+ggsave(nam1, plot = p, device = "pdf", width = 4, height = 4)
+
+d1=cbind(xy,log(mu_ct45_decline))
+colnames(d1)=c("x","y","Expected Number Of Infestations")
+p=ggplot(data=d1,aes(x,y,fill=`Expected Number Of Infestations`))+
+  geom_raster()+
+  scale_fill_viridis(option="magma",limit=c(minimum,maximum))+
+  coord_fixed(ratio = 1)+
+  theme_void() + 
+  theme(
+    axis.text.x = element_blank(),
+    axis.text.y = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.ticks.y = element_blank(),
+    legend.key.height = unit(0.13, "npc"),
+    legend.title = element_blank(),
+    legend.text = element_text(size = 24)
+  )
+p
+nam1=paste("chapter 4/Abundance_area1_decline_ct45_mean(log)")
+nam1=paste(nam1,".pdf",sep="")
+ggsave(nam1, plot = p, device = "pdf", width = 4, height = 4)
+
+d1=cbind(xy,pi_ct45_decline)
+colnames(d1)=c("x","y","Probability Of Ocurrence")
+p=ggplot(data=d1,aes(x,y,fill=`Probability Of Ocurrence`))+
+  geom_raster()+
+  scale_fill_viridis(option="magma",limit=c(0,1))+
+  coord_fixed(ratio = 1)+
+  theme_void() + 
+  theme(
+    axis.text.x = element_blank(),
+    axis.text.y = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.ticks.y = element_blank(),
+    legend.key.height = unit(0.13, "npc"),
+    legend.title = element_blank(),
+    legend.text = element_text(size = 24)
+  )
+p
+nam1=paste("chapter 4/PA_area1_decline_ct45_prob")
+nam1=paste(nam1,".pdf",sep="")
+ggsave(nam1, plot = p, device = "pdf", width = 4, height = 4)
+
+d1=cbind(xy,log(mu_ct85_decline))
+colnames(d1)=c("x","y","Expected Number Of Infestations")
+p=ggplot(data=d1,aes(x,y,fill=`Expected Number Of Infestations`))+
+  geom_raster()+
+  scale_fill_viridis(option="magma",limit=c(minimum,maximum))+
+  coord_fixed(ratio = 1)+
+  theme_void() + 
+  theme(
+    axis.text.x = element_blank(),
+    axis.text.y = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.ticks.y = element_blank(),
+    legend.key.height = unit(0.13, "npc"),
+    legend.title = element_blank(),
+    legend.text = element_text(size = 24)
+  )
+p
+nam1=paste("chapter 4/Abundance_area1_decline_ct85_mean(log)")
+nam1=paste(nam1,".pdf",sep="")
+ggsave(nam1, plot = p, device = "pdf", width = 4, height = 4)
+
+d1=cbind(xy,pi_ct85_decline)
+colnames(d1)=c("x","y","Probability Of Ocurrence")
+p=ggplot(data=d1,aes(x,y,fill=`Probability Of Ocurrence`))+
+  geom_raster()+
+  scale_fill_viridis(option="magma",limit=c(0,1))+
+  coord_fixed(ratio = 1)+
+  theme_void() + 
+  theme(
+    axis.text.x = element_blank(),
+    axis.text.y = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.ticks.y = element_blank(),
+    legend.key.height = unit(0.13, "npc"),
+    legend.title = element_blank(),
+    legend.text = element_text(size = 24)
+  )
+p
+nam1=paste("chapter 4/PA_area1_decline_ct85_prob")
+nam1=paste(nam1,".pdf",sep="")
+ggsave(nam1, plot = p, device = "pdf", width = 4, height = 4)
+
+d1=cbind(xy,log(mu_rh26_decline))
+colnames(d1)=c("x","y","Expected Number Of Infestations")
+p=ggplot(data=d1,aes(x,y,fill=`Expected Number Of Infestations`))+
+  geom_raster()+
+  scale_fill_viridis(option="magma",limit=c(minimum,maximum))+
+  coord_fixed(ratio = 1)+
+  theme_void() + 
+  theme(
+    axis.text.x = element_blank(),
+    axis.text.y = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.ticks.y = element_blank(),
+    legend.key.height = unit(0.13, "npc"),
+    legend.title = element_blank(),
+    legend.text = element_text(size = 24)
+  )
+p
+nam1=paste("chapter 4/Abundance_area1_decline_rh26_mean(log)")
+nam1=paste(nam1,".pdf",sep="")
+ggsave(nam1, plot = p, device = "pdf", width = 4, height = 4)
+
+#decrease as temp goes up
+d1=cbind(xy,pi_rh26_decline)
+colnames(d1)=c("x","y","Probability Of Ocurrence")
+p=ggplot(data=d1,aes(x,y,fill=`Probability Of Ocurrence`))+
+  geom_raster()+
+  scale_fill_viridis(option="magma",limit=c(0,1))+
+  coord_fixed(ratio = 1)+
+  theme_void() + 
+  theme(
+    axis.text.x = element_blank(),
+    axis.text.y = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.ticks.y = element_blank(),
+    legend.key.height = unit(0.13, "npc"),
+    legend.title = element_blank(),
+    legend.text = element_text(size = 24)
+  )
+p
+nam1=paste("chapter 4/PA_area1_decline_rh26_prob")
+nam1=paste(nam1,".pdf",sep="")
+ggsave(nam1, plot = p, device = "pdf", width = 4, height = 4)
+
+d1=cbind(xy,log(mu_rh45_decline))
+colnames(d1)=c("x","y","Expected Number Of Infestations")
+p=ggplot(data=d1,aes(x,y,fill=`Expected Number Of Infestations`))+
+  geom_raster()+
+  scale_fill_viridis(option="magma",limit=c(minimum,maximum))+
+  coord_fixed(ratio = 1)+
+  theme_void() + 
+  theme(
+    axis.text.x = element_blank(),
+    axis.text.y = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.ticks.y = element_blank(),
+    legend.key.height = unit(0.13, "npc"),
+    legend.title = element_blank(),
+    legend.text = element_text(size = 24)
+  )
+p
+nam1=paste("chapter 4/Abundance_area1_decline_rh45_mean(log)")
+nam1=paste(nam1,".pdf",sep="")
+ggsave(nam1, plot = p, device = "pdf", width = 4, height = 4)
+
+d1=cbind(xy,pi_rh45_decline)
+colnames(d1)=c("x","y","Probability Of Ocurrence")
+p=ggplot(data=d1,aes(x,y,fill=`Probability Of Ocurrence`))+
+  geom_raster()+
+  scale_fill_viridis(option="magma",limit=c(0,1))+
+  coord_fixed(ratio = 1)+
+  theme_void() + 
+  theme(
+    axis.text.x = element_blank(),
+    axis.text.y = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.ticks.y = element_blank(),
+    legend.key.height = unit(0.13, "npc"),
+    legend.title = element_blank(),
+    legend.text = element_text(size = 24)
+  )
+p
+nam1=paste("chapter 4/PA_area1_decline_rh45_prob")
+nam1=paste(nam1,".pdf",sep="")
+ggsave(nam1, plot = p, device = "pdf", width = 4, height = 4)
+
+d1=cbind(xy,log(mu_rh85_decline))
+colnames(d1)=c("x","y","Expected Number Of Infestations")
+p=ggplot(data=d1,aes(x,y,fill=`Expected Number Of Infestations`))+
+  geom_raster()+
+  scale_fill_viridis(option="magma",limit=c(minimum,maximum))+
+  coord_fixed(ratio = 1)+
+  theme_void() + 
+  theme(
+    axis.text.x = element_blank(),
+    axis.text.y = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.ticks.y = element_blank(),
+    legend.key.height = unit(0.13, "npc"),
+    legend.title = element_blank(),
+    legend.text = element_text(size = 24)
+  )
+p
+nam1=paste("chapter 4/Abundance_area1_decline_rh85_mean(log)")
+nam1=paste(nam1,".pdf",sep="")
+ggsave(nam1, plot = p, device = "pdf", width = 4, height = 4)
+
+d1=cbind(xy,pi_rh85_decline)
+colnames(d1)=c("x","y","Probability Of Ocurrence")
+p=ggplot(data=d1,aes(x,y,fill=`Probability Of Ocurrence`))+
+  geom_raster()+
+  scale_fill_viridis(option="magma",limit=c(0,1))+
+  coord_fixed(ratio = 1)+
+  theme_void() + 
+  theme(
+    axis.text.x = element_blank(),
+    axis.text.y = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.ticks.y = element_blank(),
+    legend.key.height = unit(0.13, "npc"),
+    legend.title = element_blank(),
+    legend.text = element_text(size = 24)
+  )
+p
+nam1=paste("chapter 4/PA_area1_decline_rh85_prob")
+nam1=paste(nam1,".pdf",sep="")
+ggsave(nam1, plot = p, device = "pdf", width = 4, height = 4)
+
+d1=cbind(xy,log(mu_smi26_decline))
+colnames(d1)=c("x","y","Expected Number Of Infestations")
+p=ggplot(data=d1,aes(x,y,fill=`Expected Number Of Infestations`))+
+  geom_raster()+
+  scale_fill_viridis(option="magma",limit=c(minimum,maximum))+
+  coord_fixed(ratio = 1)+
+  theme_void() + 
+  theme(
+    axis.text.x = element_blank(),
+    axis.text.y = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.ticks.y = element_blank(),
+    legend.key.height = unit(0.13, "npc"),
+    legend.title = element_blank(),
+    legend.text = element_text(size = 24)
+  )
+p
+nam1=paste("chapter 4/Abundance_area1_decline_smi26_mean(log)")
+nam1=paste(nam1,".pdf",sep="")
+ggsave(nam1, plot = p, device = "pdf", width = 4, height = 4)
+
+d1=cbind(xy,pi_smi26_decline)
+colnames(d1)=c("x","y","Probability Of Ocurrence")
+p=ggplot(data=d1,aes(x,y,fill=`Probability Of Ocurrence`))+
+  geom_raster()+
+  scale_fill_viridis(option="magma",limit=c(0,1))+
+  coord_fixed(ratio = 1)+
+  theme_void() + 
+  theme(
+    axis.text.x = element_blank(),
+    axis.text.y = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.ticks.y = element_blank(),
+    legend.key.height = unit(0.13, "npc"),
+    legend.title = element_blank(),
+    legend.text = element_text(size = 24)
+  )
+p
+nam1=paste("chapter 4/PA_area1_decline_smi26_prob")
+nam1=paste(nam1,".pdf",sep="")
+ggsave(nam1, plot = p, device = "pdf", width = 4, height = 4)
+
+d1=cbind(xy,log(mu_smi45_decline))
+colnames(d1)=c("x","y","Expected Number Of Infestations")
+p=ggplot(data=d1,aes(x,y,fill=`Expected Number Of Infestations`))+
+  geom_raster()+
+  scale_fill_viridis(option="magma",limit=c(minimum,maximum))+
+  coord_fixed(ratio = 1)+
+  theme_void() + 
+  theme(
+    axis.text.x = element_blank(),
+    axis.text.y = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.ticks.y = element_blank(),
+    legend.key.height = unit(0.13, "npc"),
+    legend.title = element_blank(),
+    legend.text = element_text(size = 24)
+  )
+p
+nam1=paste("chapter 4/Abundance_area1_decline_smi45_mean(log)")
+nam1=paste(nam1,".pdf",sep="")
+ggsave(nam1, plot = p, device = "pdf", width = 4, height = 4)
+
+d1=cbind(xy,pi_smi45_decline)
+colnames(d1)=c("x","y","Probability Of Ocurrence")
+p=ggplot(data=d1,aes(x,y,fill=`Probability Of Ocurrence`))+
+  geom_raster()+
+  scale_fill_viridis(option="magma",limit=c(0,1))+
+  coord_fixed(ratio = 1)+
+  theme_void() + 
+  theme(
+    axis.text.x = element_blank(),
+    axis.text.y = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.ticks.y = element_blank(),
+    legend.key.height = unit(0.13, "npc"),
+    legend.title = element_blank(),
+    legend.text = element_text(size = 24)
+  )
+p
+nam1=paste("chapter 4/PA_area1_decline_smi45_prob")
+nam1=paste(nam1,".pdf",sep="")
+ggsave(nam1, plot = p, device = "pdf", width = 4, height = 4)
+
+d1=cbind(xy,log(mu_smi85_decline))
+colnames(d1)=c("x","y","Expected Number Of Infestations")
+p=ggplot(data=d1,aes(x,y,fill=`Expected Number Of Infestations`))+
+  geom_raster()+
+  scale_fill_viridis(option="magma",limit=c(minimum,maximum))+
+  coord_fixed(ratio = 1)+
+  theme_void() + 
+  theme(
+    axis.text.x = element_blank(),
+    axis.text.y = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.ticks.y = element_blank(),
+    legend.key.height = unit(0.13, "npc"),
+    legend.title = element_blank(),
+    legend.text = element_text(size = 24)
+  )
+p
+nam1=paste("chapter 4/Abundance_area1_decline_smi85_mean(log)")
+nam1=paste(nam1,".pdf",sep="")
+ggsave(nam1, plot = p, device = "pdf", width = 4, height = 4)
+
+d1=cbind(xy,pi_smi85_decline)
+colnames(d1)=c("x","y","Probability Of Ocurrence")
+p=ggplot(data=d1,aes(x,y,fill=`Probability Of Ocurrence`))+
+  geom_raster()+
+  scale_fill_viridis(option="magma",limit=c(0,1))+
+  coord_fixed(ratio = 1)+
+  theme_void() + 
+  theme(
+    axis.text.x = element_blank(),
+    axis.text.y = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.ticks.y = element_blank(),
+    legend.key.height = unit(0.13, "npc"),
+    legend.title = element_blank(),
+    legend.text = element_text(size = 24)
+  )
+p
+nam1=paste("chapter 4/PA_area1_decline_smi85_prob")
+nam1=paste(nam1,".pdf",sep="")
+ggsave(nam1, plot = p, device = "pdf", width = 4, height = 4)
+
+d1=cbind(xy,log(mu_dd26_decline))
+colnames(d1)=c("x","y","Expected Number Of Infestations")
+p=ggplot(data=d1,aes(x,y,fill=`Expected Number Of Infestations`))+
+  geom_raster()+
+  scale_fill_viridis(option="magma",limit=c(minimum,maximum))+
+  coord_fixed(ratio = 1)+
+  theme_void() + 
+  theme(
+    axis.text.x = element_blank(),
+    axis.text.y = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.ticks.y = element_blank(),
+    legend.key.height = unit(0.13, "npc"),
+    legend.title = element_blank(),
+    legend.text = element_text(size = 24)
+  )
+p
+nam1=paste("chapter 4/Abundance_area1_decline_dd26_mean(log)")
+nam1=paste(nam1,".pdf",sep="")
+ggsave(nam1, plot = p, device = "pdf", width = 4, height = 4)
+
+d1=cbind(xy,pi_dd26_decline)
+colnames(d1)=c("x","y","Probability Of Ocurrence")
+p=ggplot(data=d1,aes(x,y,fill=`Probability Of Ocurrence`))+
+  geom_raster()+
+  scale_fill_viridis(option="magma",limit=c(0,1))+
+  coord_fixed(ratio = 1)+
+  theme_void() + 
+  theme(
+    axis.text.x = element_blank(),
+    axis.text.y = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.ticks.y = element_blank(),
+    legend.key.height = unit(0.13, "npc"),
+    legend.title = element_blank(),
+    legend.text = element_text(size = 24)
+  )
+p
+nam1=paste("chapter 4/PA_area1_decline_dd26_prob")
+nam1=paste(nam1,".pdf",sep="")
+ggsave(nam1, plot = p, device = "pdf", width = 4, height = 4)
+
+d1=cbind(xy,log(mu_dd45_decline))
+colnames(d1)=c("x","y","Expected Number Of Infestations")
+p=ggplot(data=d1,aes(x,y,fill=`Expected Number Of Infestations`))+
+  geom_raster()+
+  scale_fill_viridis(option="magma",limit=c(minimum,maximum))+
+  coord_fixed(ratio = 1)+
+  theme_void() + 
+  theme(
+    axis.text.x = element_blank(),
+    axis.text.y = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.ticks.y = element_blank(),
+    legend.key.height = unit(0.13, "npc"),
+    legend.title = element_blank(),
+    legend.text = element_text(size = 24)
+  )
+p
+nam1=paste("chapter 4/Abundance_area1_decline_dd45_mean(log)")
+nam1=paste(nam1,".pdf",sep="")
+ggsave(nam1, plot = p, device = "pdf", width = 4, height = 4)
+
+d1=cbind(xy,pi_dd45_decline)
+colnames(d1)=c("x","y","Probability Of Ocurrence")
+p=ggplot(data=d1,aes(x,y,fill=`Probability Of Ocurrence`))+
+  geom_raster()+
+  scale_fill_viridis(option="magma",limit=c(0,1))+
+  coord_fixed(ratio = 1)+
+  theme_void() + 
+  theme(
+    axis.text.x = element_blank(),
+    axis.text.y = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.ticks.y = element_blank(),
+    legend.key.height = unit(0.13, "npc"),
+    legend.title = element_blank(),
+    legend.text = element_text(size = 24)
+  )
+p
+nam1=paste("chapter 4/PA_area1_decline_dd45_prob")
+nam1=paste(nam1,".pdf",sep="")
+ggsave(nam1, plot = p, device = "pdf", width = 4, height = 4)
+
+d1=cbind(xy,log(mu_dd85_decline))
+colnames(d1)=c("x","y","Expected Number Of Infestations")
+p=ggplot(data=d1,aes(x,y,fill=`Expected Number Of Infestations`))+
+  geom_raster()+
+  scale_fill_viridis(option="magma",limit=c(minimum,maximum))+
+  coord_fixed(ratio = 1)+
+  theme_void() + 
+  theme(
+    axis.text.x = element_blank(),
+    axis.text.y = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.ticks.y = element_blank(),
+    legend.key.height = unit(0.13, "npc"),
+    legend.title = element_blank(),
+    legend.text = element_text(size = 24)
+  )
+p
+nam1=paste("chapter 4/Abundance_area1_decline_dd85_mean(log)")
+nam1=paste(nam1,".pdf",sep="")
+ggsave(nam1, plot = p, device = "pdf", width = 4, height = 4)
+
+d1=cbind(xy,pi_dd85_decline)
+colnames(d1)=c("x","y","Probability Of Ocurrence")
+p=ggplot(data=d1,aes(x,y,fill=`Probability Of Ocurrence`))+
+  geom_raster()+
+  scale_fill_viridis(option="magma",limit=c(0,1))+
+  coord_fixed(ratio = 1)+
+  theme_void() + 
+  theme(
+    axis.text.x = element_blank(),
+    axis.text.y = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.ticks.y = element_blank(),
+    legend.key.height = unit(0.13, "npc"),
+    legend.title = element_blank(),
+    legend.text = element_text(size = 24)
+  )
+p
+nam1=paste("chapter 4/PA_area1_decline_dd85_prob")
+nam1=paste(nam1,".pdf",sep="")
+ggsave(nam1, plot = p, device = "pdf", width = 4, height = 4)
+
+d1=cbind(xy,log(mu_all26_decline))
+colnames(d1)=c("x","y","Expected Number Of Infestations")
+p=ggplot(data=d1,aes(x,y,fill=`Expected Number Of Infestations`))+
+  geom_raster()+
+  scale_fill_viridis(option="magma",limit=c(minimum,maximum))+
+  coord_fixed(ratio = 1)+
+  theme_void() + 
+  theme(
+    axis.text.x = element_blank(),
+    axis.text.y = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.ticks.y = element_blank(),
+    legend.key.height = unit(0.13, "npc"),
+    legend.title = element_blank(),
+    legend.text = element_text(size = 24)
+  )
+p
+nam1=paste("chapter 4/Abundance_area1_decline_all26_mean(log)")
+nam1=paste(nam1,".pdf",sep="")
+ggsave(nam1, plot = p, device = "pdf", width = 4, height = 4)
+
+d1=cbind(xy,pi_all26_decline)
+colnames(d1)=c("x","y","Probability Of Ocurrence")
+p=ggplot(data=d1,aes(x,y,fill=`Probability Of Ocurrence`))+
+  geom_raster()+
+  scale_fill_viridis(option="magma",limit=c(0,1))+
+  coord_fixed(ratio = 1)+
+  theme_void() + 
+  theme(
+    axis.text.x = element_blank(),
+    axis.text.y = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.ticks.y = element_blank(),
+    legend.key.height = unit(0.13, "npc"),
+    legend.title = element_blank(),
+    legend.text = element_text(size = 24)
+  )
+p
+nam1=paste("chapter 4/PA_area1_decline_all26_prob")
+nam1=paste(nam1,".pdf",sep="")
+ggsave(nam1, plot = p, device = "pdf", width = 4, height = 4)
+
+d1=cbind(xy,log(mu_all45_decline))
+colnames(d1)=c("x","y","Expected Number Of Infestations")
+p=ggplot(data=d1,aes(x,y,fill=`Expected Number Of Infestations`))+
+  geom_raster()+
+  scale_fill_viridis(option="magma",limit=c(minimum,maximum))+
+  coord_fixed(ratio = 1)+
+  theme_void() + 
+  theme(
+    axis.text.x = element_blank(),
+    axis.text.y = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.ticks.y = element_blank(),
+    legend.key.height = unit(0.13, "npc"),
+    legend.title = element_blank(),
+    legend.text = element_text(size = 24)
+  )
+p
+nam1=paste("chapter 4/Abundance_area1_decline_all45_mean(log)")
+nam1=paste(nam1,".pdf",sep="")
+ggsave(nam1, plot = p, device = "pdf", width = 4, height = 4)
+
+d1=cbind(xy,pi_all45_decline)
+colnames(d1)=c("x","y","Probability Of Ocurrence")
+p=ggplot(data=d1,aes(x,y,fill=`Probability Of Ocurrence`))+
+  geom_raster()+
+  scale_fill_viridis(option="magma",limit=c(0,1))+
+  coord_fixed(ratio = 1)+
+  theme_void() + 
+  theme(
+    axis.text.x = element_blank(),
+    axis.text.y = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.ticks.y = element_blank(),
+    legend.key.height = unit(0.13, "npc"),
+    legend.title = element_blank(),
+    legend.text = element_text(size = 24)
+  )
+p
+nam1=paste("chapter 4/PA_area1_decline_all45_prob")
+nam1=paste(nam1,".pdf",sep="")
+ggsave(nam1, plot = p, device = "pdf", width = 4, height = 4)
+
+d1=cbind(xy,log(mu_all85_decline))
+colnames(d1)=c("x","y","Expected Number Of Infestations")
+p=ggplot(data=d1,aes(x,y,fill=`Expected Number Of Infestations`))+
+  geom_raster()+
+  scale_fill_viridis(option="magma",limit=c(minimum,maximum))+
+  coord_fixed(ratio = 1)+
+  theme_void() + 
+  theme(
+    axis.text.x = element_blank(),
+    axis.text.y = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.ticks.y = element_blank(),
+    legend.key.height = unit(0.13, "npc"),
+    legend.title = element_blank(),
+    legend.text = element_text(size = 24)
+  )
+p
+nam1=paste("chapter 4/Abundance_area1_decline_all85_mean(log)")
+nam1=paste(nam1,".pdf",sep="")
+ggsave(nam1, plot = p, device = "pdf", width = 4, height = 4)
+
+d1=cbind(xy,pi_all85_decline)
+colnames(d1)=c("x","y","Probability Of Ocurrence")
+p=ggplot(data=d1,aes(x,y,fill=`Probability Of Ocurrence`))+
+  geom_raster()+
+  scale_fill_viridis(option="magma",limit=c(0,1))+
+  coord_fixed(ratio = 1)+
+  theme_void() + 
+  theme(
+    axis.text.x = element_blank(),
+    axis.text.y = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.ticks.y = element_blank(),
+    legend.key.height = unit(0.13, "npc"),
+    legend.title = element_blank(),
+    legend.text = element_text(size = 24)
+  )
+p
+nam1=paste("chapter 4/PA_area1_decline_all85_prob")
+nam1=paste(nam1,".pdf",sep="")
+ggsave(nam1, plot = p, device = "pdf", width = 4, height = 4)
