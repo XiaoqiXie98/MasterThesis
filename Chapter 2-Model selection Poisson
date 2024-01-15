@@ -1,0 +1,236 @@
+setwd("/Users/xiaoqixie/Desktop/Thesis")
+load("Code/Chapter 2/area 1.RData")
+year=as.numeric()
+for(i in 2007:2020){
+  year=c(year,replicate(9810,i))
+}
+load("Code/Chapter 2/dispersal_within_4_excludecell.RData")
+data=cbind(year,data_final,dispersal)
+data1=data[-which(data$mz==0&data$Infestations==0),]
+#remove age squared, height, last year infestations within 0.75, 1.25, and 4
+X=scale(data1[,-c(1:4,9,10,11,14,21,23,24,25,26)],center=T,scale=T)
+colnames(X)[14]="Dispersal influence within 4 km"
+y=data1$Infestations
+year1=data1$year
+#outbreak(2007-2014)
+X1=X[which(year1<2015),]
+y1=y[which(year1<2015)]
+
+#growth peak declining(2015-2020)
+X2=X[which(year1>2014),]
+y2=y[which(year1>2014)]
+
+#The previous gird search shows that 
+#For the poisson model, the optimal weights are 0.99(outbreak) 0.99(growth peak declining)
+library(ncvreg)
+poisson1=ncvreg(X1,y1,
+                family="poisson",
+                standardize=F,rescale=F,
+                gamma=3.7,
+                nlambda=100,
+                penalty="SCAD",
+                alpha=0.99,
+                trace=T)
+poisson2=ncvreg(X2,y2,
+                family="poisson",
+                standardize=F,rescale=F,
+                gamma=3.7,
+                nlambda=100,
+                penalty="SCAD",
+                alpha=0.99,
+                trace=T)
+#BIC
+BIC(poisson1)[which.min(BIC(poisson1))]
+BIC(poisson2)[which.min(BIC(poisson2))]
+#Log-likelihood
+logLik(poisson1)[which.min(BIC(poisson1))]
+logLik(poisson2)[which.min(BIC(poisson2))]
+#Coefficients
+cx1=coef(poisson1)[,which.min(BIC(poisson1))]
+cx2=coef(poisson2)[,which.min(BIC(poisson2))]
+
+#RQR poisson
+x1<-as.matrix(cbind(1,X1))
+mu1<-exp(x1%*%cx1)
+
+x2<-as.matrix(cbind(1,X2))
+mu2<-exp(x2%*%cx2)
+
+#
+RQR<-function(mu1,I){
+  set.seed(150)
+  Fn=as.numeric()
+  for(i in 1:length(mu1)){
+    if(I[i]==0){
+      pdf=dpois(0,mu1[i])
+      Fn<-c(Fn,pdf*runif(1,min=0,max=1))
+    }else{
+      cdf=ppois(I[i]-1,mu1[i])
+      pdf<-dpois(I[i],mu1[i])
+      Fn=c(Fn,cdf+pdf*runif(1,min=0,max=1))
+    }
+    
+  }
+  Fn<-round(Fn,digits=5)
+  Z<-qnorm(Fn,mean=0,sd=1)
+  l<-numeric()
+  p1<-which(Z<Inf)
+  p2<-which(Z>-Inf)
+  Z<-Z[which(Z<Inf)]
+  Z<-Z[which(Z>-Inf)]
+  RQ<-(Z-mean(Z))/as.numeric(sqrt(var(Z)))
+  l<-cbind(intersect(p1,p2),RQ)
+  #l=l[which(l[,2]==sort(l[,2])),]
+  return(l)
+}
+normqua<-function(i,n){
+  return(qnorm((i-3/8)/(n+1/4),mean=0,sd=1,lower.tail=T))
+}
+
+#
+library(pbapply)
+Random=function(mu){#mu is a number
+  return(rpois( 100, lambda = mu))
+}
+output1<-pblapply(mu1,Random,cl=6)
+random1=do.call(rbind,output1)
+dim(random1)
+
+output2<-pblapply(mu2,Random,cl=6)
+random2=do.call(rbind,output2)
+dim(random2)
+
+func=function(x,random_num){#x is the data without response variable and random_num is the generated y
+  datan=cbind(x,random_num)#create new data
+  colnames(datan)=c(colnames(x),"y")
+  refit<-glm(y~.,data=data.frame(datan),family = "poisson")
+  mucountn<-exp(cbind(1,x)%*%refit$coefficients)
+  k<-RQR(mucountn,random_num)
+  t=rep(-100,dim(x)[1])
+  t[1:dim(k)[1]]<-sort(k[,2])
+  return(t)
+}
+
+t1=pbapply(random1,2,func,x=X1,cl=6)
+t2=pbapply(random2,2,func,x=X2,cl=6)
+
+func1=function(t_row){#input is each row of t
+  print(j)
+  m<-t_row
+  m<-m[which(m!=-100)]
+  l<-c(quantile(sort(m),probs=0.025),quantile(sort(m),probs=0.975))
+  return(l)
+  #df<-rbind(df,l)
+}
+df1=pbapply(t1,1,func1,cl=6)
+df1=t(df1)
+
+df2=pbapply(t2,1,func1,cl=6)
+df2=t(df2)
+
+
+P1=RQR(mu1,y1)
+P2=RQR(mu2,y2)
+library("ggplot2")
+#plot for two stages
+tab1=data.frame(cbind(round(mu1[P1[,1]],2),P1[,2]))
+colnames(tab1)=c("Fitted value","RQR")
+p=ggplot(aes(`Fitted value`,RQR),data=tab1)+
+  geom_point()+
+  coord_cartesian(xlim=c(0,500)) + 
+  geom_abline(slope=0,intercept=0,col="red")+
+  ggtitle("Outbreak")+
+  theme_minimal() +
+  theme(
+    axis.text.y = element_text(size = 20,angle = 0, hjust = 0),
+    axis.text.x = element_text(size = 18),
+    axis.ticks.y = element_line(linewidth = 0.5),
+    axis.title.y = element_text(size = 16),
+    axis.title=element_text(size=16,face="bold"),
+    plot.title = element_text(size = 24, hjust = 0.5))
+p
+
+#nam1=paste("Chapter 2/standardized plots/RQR_p_outbreak_std")
+#nam1=paste(nam1,".pdf",sep="")
+#ggsave(nam1, plot = p, device = "pdf", width = 12, height = 8)
+
+
+tab2=data.frame(cbind(round(mu2[P2[,1]],2),P2[,2]))
+colnames(tab2)=c("Fitted value","RQR")
+p=ggplot(aes(`Fitted value`,RQR),data=tab2)+
+  geom_point()+
+  coord_cartesian(xlim=c(0,500)) + 
+  geom_abline(slope=0,intercept=0,col="red")+
+  ggtitle("Growth Peak Declining")+
+  theme_minimal() +
+  theme(
+    axis.text.y = element_text(size = 20,angle = 0, hjust = 0),
+    axis.text.x = element_text(size = 18),
+    axis.ticks.y = element_line(linewidth = 0.5),
+    axis.title.y = element_text(size = 16),
+    axis.title=element_text(size=16,face="bold"),
+    plot.title = element_text(size = 24, hjust = 0.5))
+p
+
+#nam1=paste("Chapter 2/standardized plots/RQR_p_endemic_std")
+#nam1=paste(nam1,".pdf",sep="")
+#ggsave(nam1, plot = p, device = "pdf", width = 12, height = 8)
+
+################################################################
+nq1<-normqua(c(1:length(P1[,1])),length(P1[,1]))
+nq2<-normqua(c(1:length(df1[,1])),length(df1[,1]))
+plot_data <- data.frame(
+  quantile = c(nq2[P1[,1]], nq1, nq2[P1[,1]]),
+  RQR = c((df1[P1[,1],1]), sort(P1[,2]), (df1[P1[,1],2])),
+  type = factor(rep(1:3, each=length(nq2[P1[,1]])), labels = c("type1", "type2", "type3"))
+)
+# Plot using ggplot
+p1=ggplot(plot_data, aes(x=quantile, y=RQR, group=type)) +
+  geom_line(data = plot_data[plot_data$type %in% c("type1", "type3"), ], aes(color=type)) +
+  geom_point(data = plot_data[plot_data$type == "type2", ]) +
+  scale_color_manual(values = c("type1" = "red", "type2" = "black", "type3" = "red")) +
+  geom_abline(intercept = 0, slope = 1,color="yellow") +
+  labs(x="Standard Quantile", y="RQR") +
+  ggtitle("QQ plot with 95% Confidence Interval in Outbreak")+
+  theme_minimal() +
+  theme(
+    axis.text.y = element_text(size = 20,angle = 0, hjust = 0),
+    axis.text.x = element_text(size = 18),
+    axis.ticks.y = element_line(size = 0.5),
+    axis.title.y = element_text(size = 16),
+    axis.title=element_text(size=16,face="bold"),
+    legend.position = "none",
+    plot.title = element_text(size = 24, hjust = 0.5))
+p1
+#nam1=paste("Chapter 2/standardized plots/QQ_p_outbreak_std")
+#nam1=paste(nam1,".pdf",sep="")
+#ggsave(nam1, plot = p1, device = "pdf", width = 12, height = 8)
+
+nq1<-normqua(c(1:length(P2[,1])),length(P2[,1]))
+nq2<-normqua(c(1:length(df2[,1])),length(df2[,1]))
+plot_data <- data.frame(
+  quantile = c(nq2[P2[,1]], nq1, nq2[P2[,1]]),
+  RQR = c((df2[P2[,1],1]), sort(P2[,2]), (df2[P2[,1],2])),
+  type = factor(rep(1:3, each=length(nq2[P2[,1]])), labels = c("type1", "type2", "type3"))
+)
+# Plot using ggplot
+p1=ggplot(plot_data, aes(x=quantile, y=RQR, group=type)) +
+  geom_line(data = plot_data[plot_data$type %in% c("type1", "type3"), ], aes(color=type)) +
+  geom_point(data = plot_data[plot_data$type == "type2", ]) +
+  scale_color_manual(values = c("type1" = "red", "type2" = "black", "type3" = "red")) +
+  geom_abline(intercept = 0, slope = 1,color="yellow") +
+  labs(x="Standard Quantile", y="RQR") +
+  ggtitle("QQ plot with 95% Confidence Interval in Growth Peak Declining")+
+  theme_minimal() +
+  theme(
+    axis.text.y = element_text(size = 20,angle = 0, hjust = 0),
+    axis.text.x = element_text(size = 18),
+    axis.ticks.y = element_line(size = 0.5),
+    axis.title.y = element_text(size = 16),
+    axis.title=element_text(size=16,face="bold"),
+    legend.position = "none",
+    plot.title = element_text(size = 24, hjust = 0.5))
+p1
+#nam1=paste("Chapter 2/standardized plots/QQ_p_endemic_std")
+#nam1=paste(nam1,".pdf",sep="")
+#ggsave(nam1, plot = p1, device = "pdf", width = 12, height = 8)
