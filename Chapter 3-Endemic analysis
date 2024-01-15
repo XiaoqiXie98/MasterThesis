@@ -1,0 +1,305 @@
+#endemic: 2015-2020
+#Grid search shows that the optimal is count 0.25 zero 1 (standardized;2015-2020)
+setwd("/Users/xiaoqixie/Desktop/Thesis")
+load("Code/Chapter 3/endemic_model_b_std.RData")
+load("Code/Chapter 3/data_beoudoin_age.RData")
+library("dplyr")
+data2=data1[-which(data1$mz==0&data1$Infest==0),]
+year1=data2$year
+data3=data2[,-c(1:4,12,21)]
+X=scale(data3[,-16],center=T,scale=T)
+colnames(X)[15]="Dispersal influence within 4 km"
+y=data3$Infest
+#outbreak 2007-20114
+X2=X[which(year1>2014),]
+y2=y[which(year1>2014)]
+
+Data2=data3[which(year1>2014),-16]#endemic
+
+id=as.numeric()
+for(i in 1:14){
+  id=c(id,c(1:229734))
+}
+data5=cbind(id,data1)
+
+library(mpath)
+minBic <- which.min(BIC(endemic))
+gamma=round(coef(endemic, minBic)$zero,5)#presence model
+theta=round(endemic$theta[minBic],5)
+beta=round(coef(endemic, minBic)$count,5)#abundance model
+SE=se(endemic, which=which.min(endemic$bic))
+
+#return the non-standardized coefficients with their value ranges
+f=function(beta0,coeff,data){
+  mu=apply(data,2,mean)
+  std=apply(data,2,sd)
+  intercept=beta0-sum(coeff*mu/std)
+  beta=coeff/std
+  return(c(intercept,beta))
+}
+
+#Coefficients in the abundance model at the original scale
+round(f(beta[1],beta[-1],Data2),5)
+#in presence model
+-1*round(f(gamma[1],gamma[-1],Data2),5)
+
+tab=cbind(round(apply(Data2,2,min),5),round(apply(Data2,2,max),5))
+
+#confidence interval of the standardized coefficietns
+#Abundance model
+
+cf=round(beta,5)
+margin=round(qnorm(0.975)*SE$count,5)
+ci_lower=cf-margin
+ci_upper=cf+margin
+CI1=data.frame(cbind(names(cf),cf,ci_lower,ci_upper))
+colnames(CI1)=c("Name","cf","lower","upper")
+CI1$Name=c("Intercept","Northness","Easterness","Slope","Age","Pine Identity","Pine Density","Minimum Temperature in Summer","Maximum Temperature in Summer","Relative Humidity","Wind Speed","Soil Moisture Index","Degree Days","Overwinter Survival Rate","Last Year Infestations","Dispersal Impacts within 4 km")
+CI1$cf=as.numeric(CI1$cf)
+CI1$lower=as.numeric(CI1$lower)
+CI1$upper=as.numeric(CI1$upper)
+CI1$Name=as.factor(CI1$Name)
+CI1=CI1[-1,]
+CI11=CI1[-c(14:15),]
+CI12=CI1[c(14:15),]
+CI21 <- CI11[order(-CI11$cf), ]
+CI22=CI12[order(-CI12$cf), ]
+#CI2 <- CI1[order(-CI1$cf), ]
+name_order1=CI21$Name
+name_order2=CI22$Name
+#name_order=CI2$Name
+library(ggplot2)
+library(forcats)
+
+p=ggplot(CI21, aes(x=cf, y=reorder(Name, cf))) +
+  geom_point(size=6) + # Points for cf values
+  geom_vline(xintercept = 0, linetype = "dashed", color = "black", linewidth = 1) +
+  geom_errorbarh(aes(xmin=lower, xmax=upper), height=1) + # Horizontal error bars for CIs
+  labs(title="Abundance Model in Endemic",x="Coefficient Value") +
+  theme_minimal() + 
+  theme(
+    axis.text.x = element_text(size=22),
+    #axis.text.y = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.ticks.y = element_blank(),
+    axis.text.y = element_text(size = 24) ,
+    plot.title = element_text(size = 24, hjust = 0.5)
+  )
+p
+nam1=paste("/Users/xiaoqixie/Desktop/Mountain Pine Beetle/Chapter 3/confidence_interval_abundance_endemic_std_b_no_beetle_pressure.pdf")
+ggsave(nam1, plot = p, device = "pdf", width = 12, height = 8)
+
+
+p=ggplot(CI22, aes(x=cf, y=reorder(Name, cf))) +
+  geom_point(size=6) + # Points for cf values
+  geom_vline(xintercept = 0, linetype = "dashed", color = "black", linewidth = 1) +
+  geom_errorbarh(aes(xmin=lower, xmax=upper), height=1) + # Horizontal error bars for CIs
+  labs(title="Abundance Model in Endemic",x="Coefficient Value") +
+  theme_minimal() + 
+  theme(
+    axis.text.x = element_text(size=22),
+    #axis.text.y = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.ticks.y = element_blank(),
+    axis.text.y = element_text(size = 24) ,
+    plot.title = element_text(size = 24, hjust = 0.5)
+  )
+p
+nam1=paste("/Users/xiaoqixie/Desktop/Mountain Pine Beetle/Chapter 3/confidence_interval_abundance_endemic_std_b_beetle_pressure.pdf")
+ggsave(nam1, plot = p, device = "pdf", width = 12, height = 8)
+
+#Presence model
+loc=which(gamma!=0)
+cf=round(-gamma,5)[loc]
+margin=round(qnorm(0.975)*SE$zero,5)
+ci_lower=cf-margin
+ci_upper=cf+margin
+CI=data.frame(cbind(names(cf),cf,ci_lower,ci_upper))
+colnames(CI)=c("Name","cf","lower","upper")
+#CI$Name=c("Intercept","Northness","Easterness","Slope","Age","Pine Identity","Pine Density","Minimum Temperature in Summer","Maximum Temperature in Summer","Relative Humidity","Wind Speed","Soil Moisture Index","Degree Days","Overwinter Survival Rate","Last Year Infestations","Dispersal Impacts within 4 km")
+CI$Name=c("Intercept","Slope","Age","Pine Identity","Pine Density","Degree Days")
+CI$cf=as.numeric(CI$cf)
+CI$lower=as.numeric(CI$lower)
+CI$upper=as.numeric(CI$upper)
+CI$Name=as.factor(CI$Name)
+CI=CI[-1,]
+#CI11=CI[-c(14:15),]
+#CI11$Name <- factor(CI11$Name, levels = rev(name_order1))
+#CI12=CI[c(14:15),]
+#CI12$Name <- factor(CI12$Name, levels = rev(name_order2))
+CI$Name <- factor(CI$Name, levels = rev(name_order1))
+library(forcats)
+
+p=ggplot(CI, aes(x=cf, y=Name)) +
+  geom_point(size=6) + # Points for cf values
+  geom_vline(xintercept = 0, linetype = "dashed", color = "black", linewidth = 1) +
+  geom_errorbarh(aes(xmin=lower, xmax=upper), height=1) + # Horizontal error bars for CIs
+  labs(title="Presence Model in Endemic ",x="Coefficient Value") +
+  theme_minimal() + 
+  theme(
+    axis.text.x = element_text(size=22),
+    #axis.text.y = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.ticks.y = element_blank(),
+    axis.text.y = element_text(size = 24) ,
+    plot.title = element_text(size = 24, hjust = 0.5)
+  )
+p
+
+nam1=paste("/Users/xiaoqixie/Desktop/Mountain Pine Beetle/Chapter 3/confidence_interval_presence_endemic_std_b_no_beetle_pressure.pdf")
+ggsave(nam1, plot = p, device = "pdf", width = 12, height = 8)
+
+#beetle pressures have coefficients zero
+######################################################################################################################################
+#Absolute Risk and Relative Risk
+f0=function(Q,x,gamma,beta,theta){
+  
+  x1=as.numeric(c(1,x[-5]))#number 5 is Q
+  gamma1=gamma[-6]#number 6 is Q
+  beta1=beta[-6]
+  c1=sum(x1*gamma1)
+  c2=sum(x1*beta1)
+  
+  gammaq=gamma[6]
+  betaq=beta[6]
+  
+  p=(1-exp(c1+Q*gammaq)/(1+exp(c1+Q*gammaq)))*(1-theta^theta/(exp(c2+betaq*Q)+theta)^theta)
+  
+  return(p)
+}#set up function for integration
+
+f01=function(x,a,b,gamma,beta,theta){
+  i=integrate(f0,lower=a,upper=b,x=x,gamma=gamma,beta=beta,theta=theta)
+  return(i$value)
+}#integration
+
+gamma1=f(gamma[1],gamma[-1],Data2)#non-standardized coefficients
+beta1=f(beta[1],beta[-1],Data2)
+
+data6=data5[which(data5$year>2014),]
+data7=data6[,-c(1:5,13,22,23)]
+id1=data6$id
+p=round(apply(data7,1,f01,a=0,b=0.1,gamma=gamma1,beta=beta1,theta=theta),3)#jack
+q=round(apply(data7,1,f01,a=0.9,b=1,gamma=gamma1,beta=beta1,theta=theta),3)#lodge
+r1=round(q/p,3)
+
+#draw histogram rather than table
+p1=data.frame(p)
+library(dplyr)
+#probability of jack
+t1=p1%>%group_by(cut(p, breaks = seq(-0.01, 0.1, 0.01)))%>%summarise(round(length(p)/1378404,5))
+colnames(t1)=c("range","value")
+library(ggplot)
+h=ggplot(p1,aes(x = p)) +
+  geom_histogram(aes(y = after_stat(count / sum(count))),binwidth=0.01) +
+  #stat_bin(
+  #  binwidth = 0.01, geom = "text", color = "white",size=1,
+  #  aes(y = after_stat(count / sum(count)), 
+  #      label = scales::percent(after_stat(count / sum(count)))),
+  #  position = position_stack(vjust = 0.5)
+  #) +
+  ylab("Percentage")+
+  xlab("Absolute Risk")+
+  scale_y_continuous(labels = scales::percent)+
+  theme_void() + 
+  theme(axis.text.x= element_text(size=20),
+        axis.text.y = element_text(size=20),
+        axis.title.x = element_text(size=20),
+        axis.title.y = element_text(size=20,angle = 90,))
+
+h
+nam1=paste("/Users/xiaoqixie/Desktop/Mountain Pine Beetle/chapter 3/hist_endemic_abs_jack.pdf")
+ggsave(nam1, plot = h, device = "pdf", width = 10, height = 8.5)
+
+#probability of lodgepole pine
+q1=data.frame(q)
+t2=q1%>%group_by(cut(q, breaks = seq(-0.01, 0.1, 0.01)))%>%summarise(round(length(q)/1378404,5))
+h=ggplot(q1,aes(x = q)) +
+  geom_histogram(aes(y = after_stat(count / sum(count))),binwidth=0.01) +
+  #stat_bin(
+  #  binwidth = 0.01, geom = "text", color = "white",size=1,
+  #  aes(y = after_stat(count / sum(count)), 
+  #      label = scales::percent(after_stat(count / sum(count)))),
+  #  position = position_stack(vjust = 0.5)
+  #) +
+  ylab("Percentage")+
+  xlab("Absolute Risk")+
+  scale_y_continuous(labels = scales::percent,limit=c(0,1))+
+  theme_void() + 
+  theme(axis.text.x= element_text(size=20),
+        axis.text.y = element_text(size=20),
+        axis.title.x = element_text(size=20),
+        axis.title.y = element_text(size=20,angle = 90,))
+h
+nam1=paste("/Users/xiaoqixie/Desktop/Mountain Pine Beetle/chapter 3/hist_endemic_abs_lodge.pdf")
+ggsave(nam1, plot = h, device = "pdf", width = 10, height = 8.5)
+
+r11=data.frame(r1)
+#remove NaN
+r12=data.frame(r11[which(r11>=0&r11<Inf),])
+colnames(r12)="r12"#mean 13.10056 median 10
+dim(r12)
+d=r12%>%group_by(cut(r12, breaks = c(0,1,5,max(r12))))%>%#maximum is 9
+  summarise(length(r12)/163440)
+colnames(d)=c("range","portion")
+d
+
+h=ggplot(r12,aes(x = r12)) +
+  geom_histogram(aes(y = after_stat(count / sum(count))),binwidth=10) +
+  ylab("Percentage")+
+  xlab("Relative Risk")+
+  scale_y_continuous(labels = scales::percent,limit=c(0,1))+
+  theme_void() + 
+  theme(axis.text.x= element_text(size=20),
+        axis.text.y = element_text(size=20),
+        axis.title.x = element_text(size=20),
+        axis.title.y = element_text(size=20,angle = 90,))
+h
+nam1=paste("/Users/xiaoqixie/Desktop/Mountain Pine Beetle/chapter 3/hist_endemic_relative_lodge_jack.pdf")
+ggsave(nam1, plot = h, device = "pdf", width = 10, height = 8.5)
+
+
+
+
+#################################################only for back up
+#plot the averaged relative risk of cells in endemic
+Data2=data5[which(data5$year>2014),]
+xy=Data2[,3:4]
+
+d=data.frame(cbind(Data2$id,Data2$year,xy,r1))
+colnames(d)=c("id","year","x","y","Relative Risk")
+d=d[which(d$`Relative Risk`<Inf),]
+d1=d[which(d$year==2018),]#relative risk for the highest year
+xy1=d1[,3:4]
+d2=cbind(xy1,d1$`Relative Risk`)
+colnames(d2)=c("x","y","Relative Risk")
+library(ggplot2)
+library(viridis)
+# Find common scale limits across both datasets
+common_min <- 0
+common_max <- max(d$`Relative Risk`)
+
+p=ggplot(data=d2,aes(x,y,fill=`Relative Risk`))+
+  geom_raster()+
+  scale_fill_viridis(limit = c(common_min, common_max),option="mako") +#limit = c(common_min, common_max), option = "A"
+  theme_void() + 
+  theme(
+    axis.text.x = element_blank(),
+    axis.text.y = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.ticks.y = element_blank(),
+    legend.key.height = unit(0.13, "npc"), # Set the legend key height to match the plot
+    legend.title = element_text(size = 18),
+    legend.text = element_text(size = 18)
+  )
+p
+nam1=paste("/Users/xiaoqixie/Desktop/Mountain Pine Beetle/chapter 3/relative risk 2018.pdf")
+ggsave(nam1, plot = p, device = "pdf", width = 10, height = 8.5)
