@@ -1,0 +1,279 @@
+setwd("/Users/xiaoqixie/Desktop/Thesis")
+load("Code/Chapter 2/area 1.RData")#load data
+year=as.numeric()
+for(i in 2007:2020){
+  year=c(year,replicate(9810,i))
+}
+#add year
+data=cbind(year,data_final)
+data1=data[-which(data$mz==0&data$Infestations==0),]
+
+#remove unused columns and standardize data 
+X=scale(data1[,-c(1:4,11,14,21,26)],center=T,scale=T)
+colnames(X)
+y=data1$Infestations
+year1=data1$year
+
+#split data based on dynamics
+data1_outbreak=data1[which(year1<2015),-c(1:4,11,14,21,26)]
+data1_endemic=data1[which(year1>2014),-c(1:4,11,14,21,26)]
+#outbreak
+X1=X[which(year1<2015),]
+y1=y[which(year1<2015)]
+
+#grid search for the lowest BIC
+
+library(ncvreg)
+library(pbapply)
+func=function(a){
+  poisson=ncvreg(X2,y2,
+                 family="poisson",
+                 standardize=F,rescale=F,
+                 gamma=3.7,
+                 nlambda=100,
+                 penalty="SCAD",
+                 alpha=a,
+                 trace=T)
+  minBic <- which.min(BIC(poisson))
+  b=c(a,coef(poisson)[,minBic],BIC(poisson)[minBic],logLik(poisson)[minBic])
+  return(b)
+}
+A=seq(0.01, 1, 0.01)
+
+tab=pblapply(A,func,cl=6)#use 6 cores
+tab1=as.numeric()
+for(i in 1:length(A)){
+  tab1=rbind(tab1,unlist(tab[[i]]))
+}
+#1 is the optimal (standardized)
+#endemic
+X2=X[which(year1>2014),]
+y2=y[which(year1>2014)]
+A=seq(0.01, 1, 0.01)
+
+tab=pblapply(A,func,cl=6)
+tab1=as.numeric()
+for(i in 1:length(A)){
+  tab1=rbind(tab1,unlist(tab[[i]]))
+}
+#the optimal is 0.99 (standardized)
+#outbreak model
+model1=ncvreg(X1,y1,
+              family="poisson",
+              standardize=F,rescale=F,
+              gamma=3.7,
+              nlambda=100,
+              penalty="SCAD",
+              alpha=1,
+              trace=T)
+#########################
+cf=round(c(model1$beta[,which.min(BIC(model1))]),5)
+#bootstrap the variance of the coefficients
+library(boot)
+bootstrap_function <- function(data, indices) {
+  # Extract the subsample based on indices
+  sample_data <- data[indices, ]
+  
+  # Fit the ncvreg model on the subsample
+  model <- ncvreg(X = sample_data[,-dim(sample_data)[2]],
+                  y = sample_data[,dim(sample_data)[2]],
+                  family="poisson",
+                  standardize=F,rescale=F,
+                  gamma=3.7,
+                  nlambda=100,
+                  penalty="SCAD",
+                  alpha=1,
+                  trace=T) # or whatever penalty you're using
+  
+  # Return the coefficients
+  return(coef(model)[,which.min(BIC(model))])
+}
+n_bootstraps <- 100
+set.seed((150))#set random seed
+# Perform the bootstrap
+boot_results <- boot(data = cbind(X1,y1), statistic = bootstrap_function, R = n_bootstraps)
+boot_se <- apply(boot_results$t,2,sd)#std
+names(boot_se)=c("intercept",colnames(X1))
+print(boot_se)
+
+std=round(boot_se,5)
+margin=round(qnorm(0.975)*std/10,5)
+cf2=cf
+ci_lower=cf2-margin
+ci_upper=cf2+margin
+CI1=data.frame(cbind(names(cf2),cf2,ci_lower,ci_upper))
+colnames(CI1)=c("Name","cf","lower","upper")
+CI1=CI1[-1,]
+CI1$cf=as.numeric(CI1$cf)
+CI1$lower=as.numeric(CI1$lower)
+CI1$upper=as.numeric(CI1$upper)
+CI1$Name=as.factor(CI1$Name)
+#look for covariates relating to the hypotheses
+CI2=CI1[c(4,5,6,15,16,17,18),]
+CI2$Name=c("Age","Age square","Height","Last year infestations within cell","Last year infestations within 0.75 km","Last year infestations within 1.25 km","Disperal influence within 4 km")
+CI2 <- CI2[order(-CI2$cf), ]
+
+####
+CI3=CI1[-c(4,5,6,15,16,17,18),]
+CI3$Name=c("Northness","Eastness","Slope","Pine density",
+           "Minimum temperature in summer","Maximum temperature in summer",
+           "Relative humidity","Wind speed","Soil moisture index","Degree days",
+           "Overwinter survival rate")
+CI3 <- CI3[order(-CI3$cf), ]
+
+nam_order1=CI3$Name
+library(ggplot2)
+library(forcats)
+
+p=ggplot(CI2, aes(x=cf, y=reorder(Name, cf))) +
+  geom_point(size=6) + # Points for cf values
+  geom_vline(xintercept = 0, linetype = "dashed", color = "black", linewidth = 1) +
+  geom_errorbarh(aes(xmin=lower, xmax=upper), height=1) + # Horizontal error bars for CIs
+  labs(title="Outbreak",x="Coefficient Value") +
+  theme_minimal() + 
+  theme(
+    axis.text.x = element_text(size=22),
+    #axis.text.y = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.ticks.y = element_blank(),
+    axis.text.y = element_text(size = 24) ,
+    plot.title = element_text(size = 24, hjust = 0.5)
+  )
+p
+#nam1=paste("/Users/xiaoqixie/Desktop/Mountain Pine Beetle/Chapter 2/standardized plots/area1_outbreak_ci_P_std")
+#nam1=paste(nam1,".pdf",sep="")
+#ggsave(nam1, plot = p, device = "pdf", width = 12, height = 8)
+
+#
+p=ggplot(CI3, aes(x=cf, y=reorder(Name, cf))) +
+  geom_point(size=6) + # Points for cf values
+  geom_vline(xintercept = 0, linetype = "dashed", color = "black", linewidth = 1) +
+  geom_errorbarh(aes(xmin=lower, xmax=upper), height=1) + # Horizontal error bars for CIs
+  labs(title="Outbreak",x="Coefficient Value") +
+  theme_minimal() + 
+  theme(
+    axis.text.x = element_text(size=22),
+    #axis.text.y = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.ticks.y = element_blank(),
+    axis.text.y = element_text(size = 24) ,
+    plot.title = element_text(size = 24, hjust = 0.5)
+  )
+p
+#nam1=paste("/Users/xiaoqixie/Desktop/Mountain Pine Beetle/Chapter 2/standardized plots/area1_outbreak_ci_P_std1")
+#nam1=paste(nam1,".pdf",sep="")
+#ggsave(nam1, plot = p, device = "pdf", width = 12, height = 8)
+
+#endemic
+model2=ncvreg(X2,y2,
+              family="poisson",
+              standardize=F,rescale=F,
+              gamma=3.7,
+              nlambda=100,
+              penalty="SCAD",
+              alpha=0.99,
+              trace=T)
+
+cf=round(c(model2$beta[,which.min(BIC(model2))]),5)
+#bootstrap the variance of the coefficients
+bootstrap_function <- function(data, indices) {
+  # Extract the subsample based on indices
+  sample_data <- data[indices, ]
+  
+  # Fit the ncvreg model on the subsample
+  model <- ncvreg(X = sample_data[,-dim(sample_data)[2]],
+                  y = sample_data[,dim(sample_data)[2]],
+                  family="poisson",
+                  standardize=F,rescale=F,
+                  gamma=3.7,
+                  nlambda=100,
+                  penalty="SCAD",
+                  alpha=0.99,
+                  trace=T) # or whatever penalty you're using
+  
+  # Return the coefficients
+  return(coef(model)[,which.min(BIC(model))])
+}
+n_bootstraps <- 100
+set.seed((150))
+# Perform the bootstrap
+boot_results <- boot(data = cbind(X2,y2), statistic = bootstrap_function, R = n_bootstraps)
+boot_se <- apply(boot_results$t,2,sd)#std
+names(boot_se)=c("intercept",colnames(X2))
+print(boot_se)
+
+std=round(boot_se[-1],5)
+margin=round(qnorm(0.975)*std/sqrt(100),5)
+cf2=cf
+ci_lower=cf2[-1]-margin
+ci_upper=cf2[-1]+margin
+CI=data.frame(cbind(names(cf2[-1]),cf2[-1],ci_lower,ci_upper))
+colnames(CI)=c("Name","cf","lower","upper")
+CI$cf=as.numeric(CI$cf)
+CI$lower=as.numeric(CI$lower)
+CI$upper=as.numeric(CI$upper)
+CI$Name=as.factor(CI$Name)
+#look for covariates relating to the hypotheses
+CI=CI[c(4,5,6,15,16,17,18),]
+CI$Name=c("Age","Age square","Height","Last year infestations within cell","Last year infestations within 0.75 km","Last year infestations within 1.25 km","Disperal influence within 4 km")
+CI <- CI[match(CI2$Name, CI$Name), ]
+# Set the order for the factor
+CI$Name <- factor(CI$Name, levels = rev(unique_names))
+##########
+CI01=CI[-c(4,5,6,15,16,17,18),]
+CI01$Name=c("Northness","Eastness","Slope","Pine density",
+            "Minimum temperature in summer","Maximum temperature in summer",
+            "Relative humidity","Wind speed","Soil moisture index","Degree days",
+            "Overwinter survival rate")
+CI01 <- CI01[match(nam_order1, CI01$Name), ]
+# Set the order for the factor
+unique_names=CI01$Name
+CI01$Name <- factor(CI01$Name, levels = rev(unique_names))
+library(forcats)
+
+p=ggplot(CI, aes(x=cf, y=Name)) +
+  geom_point(size=6) + # Points for cf values
+  geom_vline(xintercept = 0, linetype = "dashed", color = "black", linewidth = 1) +
+  geom_errorbarh(aes(xmin=lower, xmax=upper), height=1) + # Horizontal error bars for CIs
+  labs(title="Growth Peak Declining",x="Coefficient Value") +
+  theme_minimal() + 
+  theme(
+    axis.text.x = element_text(size=22),
+    #axis.text.y = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.ticks.y = element_blank(),
+    axis.text.y = element_text(size = 24) ,
+    plot.title = element_text(size = 24, hjust = 0.5)
+  )
+p
+#nam1=paste("/Users/xiaoqixie/Desktop/Mountain Pine Beetle/Chapter 2/standardized plots/area1_endemic_ci_P_std")
+#nam1=paste(nam1,".pdf",sep="")
+#ggsave(nam1, plot = p, device = "pdf", width = 12, height = 8)
+
+p=ggplot(CI01, aes(x=cf, y=Name)) +
+  geom_point(size=6) + # Points for cf values
+  geom_vline(xintercept = 0, linetype = "dashed", color = "black", linewidth = 1) +
+  geom_errorbarh(aes(xmin=lower, xmax=upper), height=1) + # Horizontal error bars for CIs
+  labs(title="Growth Peak Declining",x="Coefficient Value") +
+  theme_minimal() + 
+  theme(
+    axis.text.x = element_text(size=22),
+    #axis.text.y = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.ticks.y = element_blank(),
+    axis.text.y = element_text(size = 24) ,
+    plot.title = element_text(size = 24, hjust = 0.5)
+  )
+p
+#nam1=paste("/Users/xiaoqixie/Desktop/Mountain Pine Beetle/Chapter 2/standardized plots/area1_endemic_ci_P_std1")
+#nam1=paste(nam1,".pdf",sep="")
+#ggsave(nam1, plot = p, device = "pdf", width = 12, height = 8)
+
